@@ -76,7 +76,9 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
 
       await _reinitializeEngine();
       await _runRecognizeBytes();
+      debugPrint('[OCR_DEMO] bootstrap OK status=$_statusMessage lines=${_ocrResult?.lines.length}');
     } catch (e) {
+      debugPrint('[OCR_DEMO] bootstrap FAIL: $e');
       if (mounted) {
         setState(() {
           _statusMessage = 'Initialization failed: $e';

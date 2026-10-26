@@ -66,5 +66,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>This app takes photos and records videos with the camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app records audio when capturing videos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app saves images and videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app saves images and videos to albums in your photo library.</string>
 </dict>
 </plist>

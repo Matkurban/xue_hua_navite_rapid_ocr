@@ -28,5 +28,13 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Used to take photos and record videos from the example app.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used to record sound with videos in the example app.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>This app saves images and videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app saves images and videos to albums in your photo library.</string>
 </dict>
 </plist>

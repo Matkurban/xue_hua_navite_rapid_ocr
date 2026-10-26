@@ -23,10 +23,22 @@ const String _kLibName = 'xue_hua_navite_rapid_ocr';
 ffi.DynamicLibrary? _tryOpenDynamicLibrary() {
   try {
     if (Platform.isMacOS || Platform.isIOS) {
+      // SPM/CocoaPods may emit either underscore or hyphenated framework names.
+      final List<String> candidates = <String>[
+        '$_kLibName.framework/$_kLibName',
+        'xue-hua-navite-rapid-ocr.framework/xue-hua-navite-rapid-ocr',
+      ];
+      for (final String path in candidates) {
+        try {
+          return ffi.DynamicLibrary.open(path);
+        } catch (_) {
+          // Try next candidate.
+        }
+      }
       try {
-        return ffi.DynamicLibrary.open('$_kLibName.framework/$_kLibName');
-      } catch (_) {
         return ffi.DynamicLibrary.process();
+      } catch (_) {
+        return null;
       }
     }
     if (Platform.isAndroid || Platform.isLinux) {
@@ -274,25 +286,42 @@ class OcrEngineFfi implements OcrPlatformEngine {
     }
   }
 
+  static const String _packageAssetPrefix =
+      'packages/xue_hua_navite_rapid_ocr/';
+
+  static Iterable<String> _assetKeyCandidates(String pathOrAsset) sync* {
+    yield pathOrAsset;
+    if (pathOrAsset.startsWith('assets/') &&
+        !pathOrAsset.startsWith(_packageAssetPrefix)) {
+      yield '$_packageAssetPrefix$pathOrAsset';
+    }
+  }
+
   static Future<Uint8List?> _tryLoadAssetBytes(String? pathOrAsset) async {
     if (pathOrAsset == null || pathOrAsset.isEmpty) return null;
     if (_isLocalFilePath(pathOrAsset)) return null;
-    try {
-      final ByteData data = await rootBundle.load(pathOrAsset);
-      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    } catch (_) {
-      return null;
+    for (final String key in _assetKeyCandidates(pathOrAsset)) {
+      try {
+        final ByteData data = await rootBundle.load(key);
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      } catch (_) {
+        // Try next candidate key.
+      }
     }
+    return null;
   }
 
   static Future<String?> _tryLoadAssetString(String? pathOrAsset) async {
     if (pathOrAsset == null || pathOrAsset.isEmpty) return null;
     if (_isLocalFilePath(pathOrAsset)) return null;
-    try {
-      return await rootBundle.loadString(pathOrAsset);
-    } catch (_) {
-      return null;
+    for (final String key in _assetKeyCandidates(pathOrAsset)) {
+      try {
+        return await rootBundle.loadString(key);
+      } catch (_) {
+        // Try next candidate key.
+      }
     }
+    return null;
   }
 
   static String _resolveEffectiveProviderName(OcrExecutionProvider ep) {

@@ -31,3 +31,6 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Large RapidOCR ONNX weights (download with scripts/download_models.sh)
+assets/models/*.onnx

@@ -47,3 +47,24 @@ flutter:
       web:
         pluginClass: XueHuaNaviteRapidOcrWebPlugin
         fileName: xue_hua_navite_rapid_ocr_web.dart
+
+  assets:
+    # Shared RapidOCR ONNX models + dictionaries (download via scripts/download_models.sh)
+    - assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+    - assets/models/ch_PP-OCRv4_det_infer.onnx
+    - assets/models/ch_PP-OCRv4_rec_infer.onnx
+    - assets/models/ppocr_keys_v1.txt
+    - assets/models/en_PP-OCRv4_rec_infer.onnx
+    - assets/models/en_dict.txt
+    - assets/models/Multilingual_PP-OCRv3_det_infer.onnx
+    - assets/models/japan_PP-OCRv4_rec_infer.onnx
+    - assets/models/japan_dict.txt
+    - assets/models/korean_PP-OCRv4_rec_infer.onnx
+    - assets/models/korean_dict.txt
+    - assets/models/latin_PP-OCRv3_rec_infer.onnx
+    - assets/models/latin_dict.txt
+    - assets/models/cyrillic_PP-OCRv3_rec_infer.onnx
+    - assets/models/cyrillic_dict.txt
+    - assets/models/arabic_PP-OCRv4_rec_infer.onnx
+    - assets/models/arabic_dict.txt
+
