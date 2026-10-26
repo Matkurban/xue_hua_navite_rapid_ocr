@@ -48,6 +48,27 @@ class OcrTextLine {
   /// Center point of the text line in image coordinates.
   Offset get center => boundingBox.center;
 
+  /// Returns a copy with any of the geometric or recognition fields replaced.
+  OcrTextLine copyWith({
+    String? text,
+    double? confidence,
+    List<Offset>? cornerPoints,
+    Rect? boundingBox,
+    double? angle,
+    double? angleConfidence,
+    double? boxScore,
+  }) {
+    return OcrTextLine(
+      text: text ?? this.text,
+      confidence: confidence ?? this.confidence,
+      cornerPoints: cornerPoints ?? this.cornerPoints,
+      boundingBox: boundingBox ?? this.boundingBox,
+      angle: angle ?? this.angle,
+      angleConfidence: angleConfidence ?? this.angleConfidence,
+      boxScore: boxScore ?? this.boxScore,
+    );
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'text': text,
     'confidence': double.parse(confidence.toStringAsFixed(4)),

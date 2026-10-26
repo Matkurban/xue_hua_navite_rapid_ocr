@@ -1,5 +1,6 @@
 ## Unreleased
 
+* Live Text highlights now follow Flutter `paintImage` / `applyBoxFit` (contain, cover, fill, alignment, and image scale), including letterboxing and EXIF orientation. Near-upright quads snap to a tight axis-aligned box; empty and near-zero-score detections are not drawn. Decoded bitmaps are localized from glyph edges instead of a fixed sheared demo sheet. Arbitrary screenshots still use a placeholder transcription until ONNX weights run.
 * Aligned ONNX model pack and asset paths with **RapidOCR v3.10.0** (`*_mobile.onnx` naming, ModelScope `resolve/v3.10.0`, SHA256 checks in `scripts/download_models.sh`).
 
 ## 1.0.0

@@ -7,6 +7,8 @@ export 'src/models/ocr_model_config.dart';
 export 'src/models/ocr_recognize_options.dart';
 export 'src/models/ocr_result.dart';
 export 'src/models/ocr_text_block.dart';
+export 'src/models/ocr_ink_line_localizer.dart'
+    show OcrInkLineLocalizer, OcrLocalizedInkLine;
 export 'src/models/ocr_text_line.dart';
 export 'src/models/paragraph_clusterer.dart' show OcrParagraphClusterer;
 export 'src/widgets/ocr_image_coordinate_transform.dart';

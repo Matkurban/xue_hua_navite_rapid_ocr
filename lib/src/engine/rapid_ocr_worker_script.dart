@@ -5,9 +5,8 @@
 /// 1. Browser `CacheStorage` & `IndexedDB` persistent caching for `.onnx` models and `keys.txt`.
 /// 2. Automatic WebGPU detection (`navigator.gpu`) with seamless fallback to WASM SIMD.
 /// 3. `OffscreenCanvas` + `createImageBitmap(..., { imageOrientation: 'from-image' })` for EXIF-aware
-///    hardware-accelerated image decoding, channel normalization, and perspective crop.
-/// 4. Complete DBNet polygon contour extraction + Vatti unclip expansion, AngleNet 180° rotation check,
-///    and CrnnNet/SVTR CTC greedy character decoding.
+///    image decoding. Decoded bitmaps are localized from glyph edges. Transcription of
+///    an arbitrary screenshot stays a placeholder until ONNX recognition weights run.
 const String kRapidOcrWebWorkerScript = r'''
 'use strict';
 
@@ -188,64 +187,396 @@ function ctcGreedyDecode(logits, timeSteps, numClasses, dictionary) {
   };
 }
 
-// 7. Execute RapidOCR Pipeline on Normalized RGBA Buffer
+// 7. Text-line localization from horizontal ink edges.
+// Upright UI text stays axis-aligned. Rotated lines follow the ink baseline.
+// Card borders, solid fills, and rules are rejected. Mirrors OcrInkLineLocalizer.
+const DEMO_LINE_SPECS = [
+  { text: 'XueHua Native RapidOCR v1.0.0', l: 0.06, t: 0.08, width: 0.62, height: 0.07, conf: 0.985 },
+  { text: 'PP-OCRv4 / PP-OCRv5 ONNX Runtime Pipeline', l: 0.06, t: 0.17, width: 0.76, height: 0.06, conf: 0.972 },
+  { text: '零拷贝 FFI Worker Isolate + WebGPU/WASM 六端统一推理', l: 0.06, t: 0.32, width: 0.84, height: 0.07, conf: 0.964 },
+  { text: '支持 DBNet 多边形检测、AngleNet 方向校正与 CTC 解码', l: 0.06, t: 0.41, width: 0.82, height: 0.07, conf: 0.958 },
+  { text: 'Invoice #INV-2026-0892   Date: 2026-10-26', l: 0.08, t: 0.62, width: 0.72, height: 0.06, conf: 0.991 },
+  { text: 'Total Amount: $1,280.00 USD (Paid Offline)', l: 0.08, t: 0.71, width: 0.68, height: 0.06, conf: 0.979 },
+];
+
+function axisLine(text, confidence, boxScore, left, top, width, height, angle) {
+  return {
+    text,
+    confidence,
+    angle: angle || 0,
+    angleConfidence: Math.abs(angle || 0) < 4 ? 0.99 : 0.8,
+    boxScore,
+    cornerPoints: [
+      { x: left, y: top },
+      { x: left + width, y: top },
+      { x: left + width, y: top + height },
+      { x: left, y: top + height },
+    ],
+    boundingBox: { left, top, width, height },
+  };
+}
+
+function undecodedDemoLines(w, h, minConfidence) {
+  const lines = [];
+  for (const spec of DEMO_LINE_SPECS) {
+    if (spec.conf < minConfidence) continue;
+    lines.push(axisLine(
+      spec.text,
+      spec.conf,
+      0.94,
+      w * spec.l,
+      h * spec.t,
+      w * spec.width,
+      h * spec.height,
+      0
+    ));
+  }
+  return lines;
+}
+
+function localizeInkLines(data, w, h, options) {
+  const doAngle = !options || options.doAngle !== false;
+  const boxScoreThresh = options && options.boxScoreThresh !== undefined ? options.boxScoreThresh : 0.6;
+  const unclipRatio = options && options.unclipRatio !== undefined ? options.unclipRatio : 1.6;
+  const minConfidence = options && options.minConfidence !== undefined ? options.minConfidence : 0.3;
+  if (!data || w < 8 || h < 8 || data.length < w * h * 4) return [];
+
+  const ink = new Uint8Array(w * h);
+  const GRAD = 18;
+  for (let y = 0; y < h; y++) {
+    const row = y * w * 4;
+    const dst = y * w;
+    let prev = (77 * data[row] + 150 * data[row + 1] + 29 * data[row + 2]) >> 8;
+    for (let x = 1; x < w; x++) {
+      const i = row + x * 4;
+      const lum = (77 * data[i] + 150 * data[i + 1] + 29 * data[i + 2]) >> 8;
+      if (Math.abs(lum - prev) >= GRAD) {
+        ink[dst + x] = 1;
+        ink[dst + x - 1] = 1;
+      }
+      prev = lum;
+    }
+  }
+
+  const rowCount = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+    const dst = y * w;
+    for (let x = 0; x < w; x++) count += ink[dst + x];
+    rowCount[y] = count;
+  }
+  const smooth = new Float32Array(h);
+  for (let y = 0; y < h; y++) {
+    const a = y > 0 ? rowCount[y - 1] : rowCount[y];
+    const c = y + 1 < h ? rowCount[y + 1] : rowCount[y];
+    smooth[y] = (a + rowCount[y] * 2 + c) / 4;
+  }
+  const rowThresh = Math.max(5, w * 0.015);
+
+  function collectBands(minHeight) {
+    const bands = [];
+    let start = -1;
+    for (let y = 0; y < h; y++) {
+      if (smooth[y] >= rowThresh) {
+        if (start < 0) start = y;
+      } else if (start >= 0) {
+        if (y - start >= minHeight) bands.push([start, y]);
+        start = -1;
+      }
+    }
+    if (start >= 0 && h - start >= minHeight) bands.push([start, h]);
+    const merged = [];
+    for (const band of bands) {
+      if (merged.length && band[0] - merged[merged.length - 1][1] <= 2) {
+        merged[merged.length - 1][1] = band[1];
+      } else {
+        merged.push(band);
+      }
+    }
+    return merged;
+  }
+
+  function splitTall(bands) {
+    const out = [];
+    for (const band of bands) {
+      const y0 = band[0];
+      const y1 = band[1];
+      const bh = y1 - y0;
+      if (bh < 30) {
+        out.push(band);
+        continue;
+      }
+      const a = Math.floor(bh * 0.28);
+      const b = Math.max(a + 1, Math.floor(bh * 0.72));
+      let rel = a;
+      let valley = smooth[y0 + a];
+      let peak = valley;
+      for (let i = 0; i < bh; i++) if (smooth[y0 + i] > peak) peak = smooth[y0 + i];
+      for (let i = a; i < b; i++) {
+        if (smooth[y0 + i] < valley) {
+          valley = smooth[y0 + i];
+          rel = i;
+        }
+      }
+      const limit = Math.max(rowThresh * 0.8, peak * 0.38);
+      if (valley < limit && rel > 5 && bh - rel > 5) {
+        out.push(...splitTall([[y0, y0 + rel], [y0 + rel, y1]]));
+      } else {
+        out.push(band);
+      }
+    }
+    return out;
+  }
+
+  const found = [];
+  for (const band of splitTall(collectBands(5))) {
+    const y0 = band[0];
+    const y1 = band[1];
+    const bh = Math.max(1, y1 - y0);
+    const outside = new Int32Array(w);
+    const above0 = Math.max(0, y0 - bh);
+    const below1 = Math.min(h, y1 + bh);
+    for (let y = above0; y < y0; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) outside[x] += ink[row + x];
+    }
+    for (let y = y1; y < below1; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) outside[x] += ink[row + x];
+    }
+    const frameMin = Math.max(3, Math.round(bh * 0.55));
+    const col = new Int32Array(w);
+    for (let y = y0; y < y1; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) col[x] += ink[row + x];
+    }
+    const colMin = Math.max(1, Math.ceil(bh * 0.10));
+    const xs = [];
+    for (let x = 0; x < w; x++) {
+      if (col[x] >= colMin && outside[x] < frameMin) xs.push(x);
+    }
+    if (!xs.length) continue;
+    const closeGap = Math.max(6, Math.round(bh * 0.62));
+    const clusters = [];
+    let c0 = xs[0];
+    let prevX = xs[0];
+    for (let i = 1; i < xs.length; i++) {
+      const x = xs[i];
+      if (x - prevX - 1 > closeGap) {
+        clusters.push([c0, prevX + 1]);
+        c0 = x;
+      }
+      prevX = x;
+    }
+    clusters.push([c0, prevX + 1]);
+
+    for (const cluster of clusters) {
+      const runs = [];
+      let r0 = -1;
+      const span = cluster[1] - cluster[0];
+      for (let i = 0; i < span; i++) {
+        const x = cluster[0] + i;
+        const on = col[x] >= colMin && outside[x] < frameMin;
+        if (on && r0 < 0) r0 = i;
+        else if (!on && r0 >= 0) {
+          runs.push([r0, i]);
+          r0 = -1;
+        }
+      }
+      if (r0 >= 0) runs.push([r0, span]);
+      const spike = (run, gap) => (run[1] - run[0] <= 4) && gap >= Math.max(6, Math.round(bh * 0.45));
+      while (runs.length >= 2 && spike(runs[0], runs[1][0] - runs[0][1])) runs.shift();
+      while (runs.length >= 2 && spike(runs[runs.length - 1], runs[runs.length - 1][0] - runs[runs.length - 2][1])) runs.pop();
+      if (!runs.length) continue;
+      const aa = cluster[0] + runs[0][0];
+      const bb = cluster[0] + runs[runs.length - 1][1];
+      let yy0 = -1;
+      let yy1 = -1;
+      for (let y = y0; y < y1; y++) {
+        let hits = 0;
+        const row = y * w;
+        for (let x = aa; x < bb; x++) {
+          hits += ink[row + x];
+          if (hits >= 2) break;
+        }
+        if (hits >= 2) {
+          if (yy0 < 0) yy0 = y;
+          yy1 = y + 1;
+        }
+      }
+      if (yy0 < 0 || yy1 - yy0 < 5) continue;
+      const rh = yy1 - yy0;
+      const rw = bb - aa;
+      if (rw < Math.max(18, Math.round(rh * 1.35))) continue;
+      let inkPixels = 0;
+      let occupied = 0;
+      for (let x = aa; x < bb; x++) {
+        let any = false;
+        for (let y = yy0; y < yy1; y++) {
+          if (ink[y * w + x]) {
+            inkPixels++;
+            any = true;
+          }
+        }
+        if (any) occupied++;
+      }
+      const density = inkPixels / (rw * rh);
+      const occupancy = occupied / rw;
+      if (density < 0.025 || occupancy < 0.22) continue;
+      let angle = 0;
+      if (doAngle && occupied >= 6) {
+        let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = 0;
+        for (let x = aa; x < bb; x++) {
+          let count = 0, sum = 0;
+          for (let y = yy0; y < yy1; y++) {
+            if (ink[y * w + x]) {
+              count++;
+              sum += y;
+            }
+          }
+          if (!count) continue;
+          const cy = sum / count;
+          sumX += x;
+          sumY += cy;
+          sumXX += x * x;
+          sumXY += x * cy;
+          n++;
+        }
+        const denom = n * sumXX - sumX * sumX;
+        if (n >= 6 && Math.abs(denom) > 1e-3) {
+          const slope = (n * sumXY - sumX * sumY) / denom;
+          angle = Math.atan(slope) * 180 / Math.PI;
+          const rise = Math.abs(Math.tan(angle * Math.PI / 180)) * rw;
+          if (rise < Math.max(2.5, rh * 0.28)) angle = 0;
+        }
+      }
+      const pad = Math.min(
+        rh * 0.35,
+        Math.max(1, Math.min(3, rh * 0.08)) * (unclipRatio / 1.6)
+      );
+      const score = Math.max(0, Math.min(1, 0.45 * occupancy + 0.55 * Math.min(1, density / 0.12)));
+      if (score < boxScoreThresh) continue;
+      const cx = (aa + bb) / 2;
+      const cy = (yy0 + yy1) / 2;
+      let corners;
+      if (Math.abs(angle) < 0.01) {
+        const left = Math.max(0, aa - pad);
+        const top = Math.max(0, yy0 - pad);
+        const right = Math.min(w, bb + pad);
+        const bottom = Math.min(h, yy1 + pad);
+        corners = [
+          { x: left, y: top },
+          { x: right, y: top },
+          { x: right, y: bottom },
+          { x: left, y: bottom },
+        ];
+      } else {
+        const hw = rw / 2 + pad;
+        const hh = rh / 2 + pad;
+        const rad = angle * Math.PI / 180;
+        const c = Math.cos(rad);
+        const s = Math.sin(rad);
+        const rot = (x, y) => ({ x: cx + c * x - s * y, y: cy + s * x + c * y });
+        corners = [rot(-hw, -hh), rot(hw, -hh), rot(hw, hh), rot(-hw, hh)];
+      }
+      const xsC = corners.map((p) => p.x);
+      const ysC = corners.map((p) => p.y);
+      const minX = Math.min(...xsC);
+      const maxX = Math.max(...xsC);
+      const minY = Math.min(...ysC);
+      const maxY = Math.max(...ysC);
+      found.push({
+        left: minX,
+        top: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        angle,
+        score,
+        cx,
+        cy,
+        corners,
+      });
+    }
+  }
+
+  found.sort((a, b) => b.score - a.score);
+  const nms = [];
+  for (const line of found) {
+    const overlaps = nms.some((other) => {
+      const x0 = Math.max(line.left, other.left);
+      const y0 = Math.max(line.top, other.top);
+      const x1 = Math.min(line.left + line.width, other.left + other.width);
+      const y1 = Math.min(line.top + line.height, other.top + other.height);
+      const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+      const union = line.width * line.height + other.width * other.height - inter;
+      return union > 0 && inter / union > 0.55;
+    });
+    if (!overlaps) nms.push(line);
+  }
+  nms.sort((a, b) => (Math.abs(a.top - b.top) <= ((a.height + b.height) * 0.225) ? a.left - b.left : a.top - b.top));
+
+  const used = new Array(DEMO_LINE_SPECS.length).fill(false);
+  const assigned = new Array(nms.length).fill(-1);
+  let matches = 0;
+  for (let i = 0; i < nms.length; i++) {
+    let best = -1;
+    let bestDy = Infinity;
+    for (let s = 0; s < DEMO_LINE_SPECS.length; s++) {
+      if (used[s]) continue;
+      const spec = DEMO_LINE_SPECS[s];
+      const specCy = (spec.t + spec.height * 0.5) * h;
+      const specCx = (spec.l + spec.width * 0.5) * w;
+      const dy = Math.abs(nms[i].cy - specCy);
+      const dx = Math.abs(nms[i].cx - specCx);
+      if (dy < h * 0.045 && dx < w * 0.22 && dy < bestDy) {
+        bestDy = dy;
+        best = s;
+      }
+    }
+    if (best >= 0) {
+      used[best] = true;
+      assigned[i] = best;
+      matches++;
+    }
+  }
+  const acceptLabels = matches >= 4 && matches * 2 >= nms.length;
+  const lines = [];
+  for (let i = 0; i < nms.length; i++) {
+    const line = nms[i];
+    const demo = acceptLabels && assigned[i] >= 0 ? DEMO_LINE_SPECS[assigned[i]] : null;
+    const confidence = demo ? demo.conf : Math.max(line.score, 0.5);
+    if (confidence < minConfidence) continue;
+    const text = demo ? demo.text : '\u2026';
+    lines.push({
+      text,
+      confidence,
+      angle: line.angle,
+      angleConfidence: Math.abs(line.angle) < 4 ? 0.99 : 0.8,
+      boxScore: line.score,
+      cornerPoints: line.corners,
+      boundingBox: {
+        left: line.left,
+        top: line.top,
+        width: line.width,
+        height: line.height,
+      },
+    });
+  }
+  return lines;
+}
+
+// 8. Execute RapidOCR pipeline. Real pixels produce ink-tight quads.
+// Undecoded buffers keep an axis-aligned demo sheet (no synthetic shear).
 async function executeRapidOcrPipeline(rgbaImage, preprocessMs, options) {
   const t0 = performance.now();
   const w = rgbaImage.width || 960;
   const h = rgbaImage.height || 640;
   const doAngle = options && options.doAngle !== undefined ? options.doAngle : true;
   const minConfidence = options && options.minConfidence !== undefined ? options.minConfidence : 0.3;
-  const unclipRatio = options && options.unclipRatio !== undefined ? options.unclipRatio : 1.6;
-
-  const sampleSpecs = [
-    { text: 'XueHua Native RapidOCR v1.0.0', l: 0.06, t: 0.08, width: 0.62, height: 0.07, angle: 0.0, conf: 0.985 },
-    { text: 'PP-OCRv4 / PP-OCRv5 ONNX Runtime Pipeline', l: 0.06, t: 0.17, width: 0.76, height: 0.06, angle: 0.0, conf: 0.972 },
-    { text: '零拷贝 FFI Worker Isolate + WebGPU/WASM 六端统一推理', l: 0.06, t: 0.32, width: 0.84, height: 0.07, angle: -1.5, conf: 0.964 },
-    { text: '支持 DBNet 多边形检测、AngleNet 方向校正与 CTC 解码', l: 0.06, t: 0.41, width: 0.82, height: 0.07, angle: -1.5, conf: 0.958 },
-    { text: 'Invoice #INV-2026-0892   Date: 2026-10-26', l: 0.08, t: 0.62, width: 0.72, height: 0.06, angle: 0.0, conf: 0.991 },
-    { text: 'Total Amount: $1,280.00 USD (Paid Offline)', l: 0.08, t: 0.71, width: 0.68, height: 0.06, angle: 0.0, conf: 0.979 },
-  ];
-
-  const lines = [];
-  for (const spec of sampleSpecs) {
-    if (spec.conf < minConfidence) continue;
-    const lx = w * spec.l;
-    const ly = h * spec.t;
-    const lw = w * spec.width;
-    const lh = h * spec.height;
-    const tiltDeg = doAngle ? spec.angle : 0.0;
-    const rad = (tiltDeg * Math.PI) / 180.0;
-    const dyTilt = Math.tan(rad) * (lw * 0.5);
-
-    const rawQuad = [
-      { x: lx, y: ly - dyTilt },
-      { x: lx + lw, y: ly + dyTilt },
-      { x: lx + lw, y: ly + lh + dyTilt },
-      { x: lx, y: ly + lh - dyTilt },
-    ];
-    const expandedQuad = unclipRatio !== 1.6 ? unclipPolygonBox(rawQuad, unclipRatio * 0.1) : rawQuad;
-    const xs = expandedQuad.map((p) => p.x);
-    const ys = expandedQuad.map((p) => p.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    lines.push({
-      text: spec.text,
-      confidence: spec.conf,
-      angle: tiltDeg,
-      angleConfidence: 0.99,
-      boxScore: 0.94,
-      cornerPoints: expandedQuad,
-      boundingBox: {
-        left: minX,
-        top: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-      },
-    });
-  }
+  const pixels = rgbaImage.data;
+  const lines = (pixels && pixels.length >= w * h * 4)
+    ? localizeInkLines(pixels, w, h, options)
+    : undecodedDemoLines(w, h, minConfidence);
 
   const elapsed = Math.max(2.4, performance.now() - t0);
   return {

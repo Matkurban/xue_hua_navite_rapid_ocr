@@ -491,10 +491,11 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               );
             }
             final Uint8List bytes = file.readAsBytesSync();
+            final ({int width, int height}) size = _encodedImageSize(bytes);
             final OcrResult fallbackResult = _runPureDartFallbackPipeline(
-              encodedBytes: bytes,
-              width: 960,
-              height: 640,
+              rgba: null,
+              width: size.width,
+              height: size.height,
               options: cmd.options,
               providerName: activeProviderName,
             );
@@ -536,10 +537,11 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               FfiWorkerResponse(requestId: reqId, payload: result),
             );
           } else {
+            final ({int width, int height}) size = _encodedImageSize(bytes);
             final OcrResult fallbackResult = _runPureDartFallbackPipeline(
-              encodedBytes: bytes,
-              width: 960,
-              height: 640,
+              rgba: null,
+              width: size.width,
+              height: size.height,
               options: cmd.options,
               providerName: activeProviderName,
             );
@@ -585,9 +587,11 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
             );
           } else {
             final OcrResult fallbackResult = _runPureDartFallbackPipeline(
-              encodedBytes: null,
+              rgba: rawPixels,
               width: cmd.width,
               height: cmd.height,
+              stride: cmd.rowStride > 0 ? cmd.rowStride : cmd.width * 4,
+              bgra: cmd.pixelFormat == OcrPixelFormat.bgra8888.nativeValue,
               options: cmd.options,
               providerName: activeProviderName,
             );
@@ -716,65 +720,92 @@ OcrResult _marshalAndFreeNativeResult(
   }
 }
 
-/// Deterministic fallback used only when running inside a pure Dart VM unit test
-/// environment where native C++ dynamic libraries are not bundled.
+/// Reads PNG IHDR or JPEG SOF dimensions. Falls back to 960×640 when the
+/// buffer is not a decodable header (unit-test stubs, truncated bytes).
+({int width, int height}) _encodedImageSize(Uint8List bytes) {
+  if (bytes.length >= 24 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4E &&
+      bytes[3] == 0x47) {
+    final int width =
+        (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    final int height =
+        (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    if (width > 0 && height > 0) return (width: width, height: height);
+  }
+  if (bytes.length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+    int offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] != 0xFF) {
+        offset++;
+        continue;
+      }
+      final int marker = bytes[offset + 1];
+      if (marker == 0xFF) {
+        offset++;
+        continue;
+      }
+      if (marker >= 0xC0 &&
+          marker <= 0xCF &&
+          marker != 0xC4 &&
+          marker != 0xC8 &&
+          marker != 0xCC) {
+        final int height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+        final int width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+        if (width > 0 && height > 0) return (width: width, height: height);
+        break;
+      }
+      if (offset + 3 >= bytes.length) break;
+      final int segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      if (segLen < 2) break;
+      offset += 2 + segLen;
+    }
+  }
+  return (width: 960, height: 640);
+}
+
+/// Fallback used when the native library is not loaded (host VM unit tests).
+///
+/// Raw pixels are localized with [OcrInkLineLocalizer]. Encoded bytes that
+/// this isolate cannot decode keep an axis-aligned demo sheet — never the
+/// old sheared canned quads.
 OcrResult _runPureDartFallbackPipeline({
-  required Uint8List? encodedBytes,
+  required Uint8List? rgba,
   required int width,
   required int height,
+  int? stride,
+  bool bgra = false,
   required OcrRecognizeOptions options,
   required String providerName,
 }) {
-  final double w = width.toDouble();
-  final double h = height.toDouble();
-  final List<OcrTextLine> rawLines = <OcrTextLine>[
-    OcrTextLine(
-      text: 'XueHua Native RapidOCR v1.0.0',
-      confidence: 0.985,
-      cornerPoints: <Offset>[
-        Offset(w * 0.06, h * 0.08),
-        Offset(w * 0.68, h * 0.08),
-        Offset(w * 0.68, h * 0.15),
-        Offset(w * 0.06, h * 0.15),
-      ],
-      boundingBox: Rect.fromLTWH(w * 0.06, h * 0.08, w * 0.62, h * 0.07),
-    ),
-    OcrTextLine(
-      text: 'PP-OCRv4 / PP-OCRv5 ONNX Runtime Pipeline',
-      confidence: 0.972,
-      cornerPoints: <Offset>[
-        Offset(w * 0.06, h * 0.17),
-        Offset(w * 0.82, h * 0.17),
-        Offset(w * 0.82, h * 0.23),
-        Offset(w * 0.06, h * 0.23),
-      ],
-      boundingBox: Rect.fromLTWH(w * 0.06, h * 0.17, w * 0.76, h * 0.06),
-    ),
-    OcrTextLine(
-      text: '零拷贝 FFI Worker Isolate + WebGPU/WASM 六端统一推理',
-      confidence: 0.964,
-      angle: options.doAngle ? -1.5 : 0.0,
-      cornerPoints: <Offset>[
-        Offset(w * 0.06, h * 0.32),
-        Offset(w * 0.90, h * 0.31),
-        Offset(w * 0.90, h * 0.38),
-        Offset(w * 0.06, h * 0.39),
-      ],
-      boundingBox: Rect.fromLTWH(w * 0.06, h * 0.31, w * 0.84, h * 0.08),
-    ),
-    OcrTextLine(
-      text: '支持 DBNet 多边形检测、AngleNet 方向校正与 CTC 解码',
-      confidence: 0.958,
-      angle: options.doAngle ? -1.5 : 0.0,
-      cornerPoints: <Offset>[
-        Offset(w * 0.06, h * 0.41),
-        Offset(w * 0.88, h * 0.40),
-        Offset(w * 0.88, h * 0.47),
-        Offset(w * 0.06, h * 0.48),
-      ],
-      boundingBox: Rect.fromLTWH(w * 0.06, h * 0.40, w * 0.82, h * 0.08),
-    ),
-  ].where((OcrTextLine l) => l.confidence >= options.minConfidence).toList();
+  List<OcrTextLine> rawLines = const <OcrTextLine>[];
+  final int rowStride = stride ?? width * 4;
+  if (rgba != null &&
+      width > 0 &&
+      height > 0 &&
+      rgba.length >= rowStride * height) {
+    final List<OcrLocalizedInkLine> localized = OcrInkLineLocalizer.localize(
+      rgba: rgba,
+      width: width,
+      height: height,
+      stride: rowStride,
+      bgra: bgra,
+      options: options,
+    );
+    rawLines = OcrInkLineLocalizer.toTextLines(
+      lines: localized,
+      imageWidth: width,
+      imageHeight: height,
+      options: options,
+    );
+  } else {
+    rawLines = OcrInkLineLocalizer.undecodedDemoLines(
+      width: width,
+      height: height,
+      options: options,
+    );
+  }
 
   final ({List<OcrTextLine> sortedLines, List<OcrTextBlock> blocks}) clustered =
       OcrParagraphClusterer.clusterLines(rawLines);
