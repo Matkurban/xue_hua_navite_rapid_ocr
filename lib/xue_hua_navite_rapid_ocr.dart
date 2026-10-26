@@ -1,4 +1,4 @@
-library xue_hua_navite_rapid_ocr;
+library;
 
 export 'src/engine/ocr_engine_interface.dart' show OcrPlatformEngine;
 export 'src/models/ocr_enums.dart';

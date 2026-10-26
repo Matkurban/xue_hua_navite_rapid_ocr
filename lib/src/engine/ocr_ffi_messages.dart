@@ -1,6 +1,4 @@
-import 'dart:typed_data';
-
-import 'package:flutter/foundation.dart';
+import 'dart:isolate' show TransferableTypedData;
 
 import '../models/ocr_models.dart';
 
