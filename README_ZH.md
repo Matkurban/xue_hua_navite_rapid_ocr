@@ -6,7 +6,7 @@
 [![Platform](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-brightgreen.svg)](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**`xue_hua_navite_rapid_ocr`** 是一款生产环境级别的 **Flutter 六端全平台离线 OCR 插件**（支持 `Android`、`iOS`、`macOS`、`Windows`、`Linux` 与 `Web`），底层基于 **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX 模型流水线)**，内置开箱即用的全平台实况文本交互组件 **`OcrLiveTextOverlay`**。
+**`xue_hua_navite_rapid_ocr`** 是一款生产环境级别的 **Flutter 六端全平台离线 OCR 插件**（支持 `Android`、`iOS`、`macOS`、`Windows`、`Linux` 与 `Web`），底层基于 **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX 模型流水线)**，全面采用 **`package:material_ui/material_ui.dart`** 构建，内置支持国际化定制与局部精准重绘的实况文本交互组件 **`OcrLiveTextOverlay`**。
 
 - **作者 (Author)**：Matkurban (`3496354336@qq.com`)
 - **仓库地址 (Repository)**：[https://github.com/Matkurban/xue_hua_navite_rapid_ocr](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
@@ -14,8 +14,9 @@
 
 ## 核心特性与架构亮点
 
-1. **严格的编译期平台隔离（Web 端零报错）**：
-   - 采用 `ocr_engine_stub.dart` + `if (dart.library.ffi) 'src/engine/ocr_engine_ffi.dart'` + `if (dart.library.js_interop) 'src/engine/ocr_engine_web.dart'` 条件编译路由，确保在执行 `flutter build web` 与 `flutter build web --wasm` 时绝不会因为传递引入 `dart:ffi` 或 `dart:io` 而编译崩溃。
+1. **严格的编译期平台隔离（Web 端零报错）与模块化分文件设计**：
+   - 采用 `ocr_engine_stub.dart` + `if (dart.library.ffi) 'engine/ocr_engine_ffi.dart'` + `if (dart.library.js_interop) 'engine/ocr_engine_web.dart'` 条件编译路由，确保在执行 `flutter build web` 与 `flutter build web --wasm` 时绝不会因为传递引入 `dart:ffi` 或 `dart:io` 而编译崩溃。
+   - 所有模型、引擎消息、Web 互操作绑定、绘制器与控制器均按单一职责拆分为独立文件，且统一使用 [`package:material_ui/material_ui.dart`](https://pub.dev/packages/material_ui)（不使用 `package:flutter/material.dart`）。
 2. **Native 端 (`Android` / `iOS` / `macOS` / `Windows` / `Linux`)**：
    - 采用 **C++17 (`RapidOcrOnnx`) + `dart:ffi` + 长生命周期 `Worker Isolate`** 零拷贝 (`TransferableTypedData`) 后台推理，彻底解放 UI 主线程。
    - **iOS & macOS** 原生支持 **Swift Package Manager (`Package.swift`)** 与 CocoaPods，共用同一套 C++17 核心代码；**Android / Windows / Linux** 提供标准 `CMakeLists.txt`（已适配 Android 15+ 16KB 页大小对齐）。
@@ -24,122 +25,186 @@
    - 严格采用现代 **`dart:js_interop` 与 `dart:js_interop_unsafe`** 规范（无任何废弃的 `dart:html` 或 `dart:js` 依赖），全面兼容 **Flutter Web WASM**。
    - 在独立 **Web Worker** 后台线程中结合 `OffscreenCanvas` / `createImageBitmap` 与 `onnxruntime-web` 完成 DBNet 多边形解算与 Vatti Unclip 扩张、AngleNet 方向分类及 CTC 贪婪解码。
    - 内置浏览器 **`CacheStorage`** 模型持久化缓存（`xue_hua_rapid_ocr_onnx_cache_v1`），避免刷新页面时重复下载 `.onnx` 模型。
-4. **纯 Dart 版面分析与段落智能聚类 (`OcrParagraphClusterer`)**：
-   - Native 与 Web 共用同一套纯 Dart 空间聚类算法，自动按阅读顺序排列 `OcrTextLine`，并将空间相邻、行高相近的文本行聚合成自然段落 `OcrTextBlock`，提供 `fullText`、`toMarkdown()` 与 `toJson()`。
-5. **杀手级 UI 组件：实况文本交互层 (`OcrLiveTextOverlay`)**：
-   - 基于 `CustomPainter` 根据每行文字的 4 个顺时针倾斜顶点 (`cornerPoints`) 精准绘制贴合倾斜角度的半透明高亮遮罩与边框。
-   - 支持点击选中单个文本框、手指滑动/鼠标拖拽框选（Marquee/Lasso）多行文字、桌面与 Web 端鼠标移入文字区域自动切换为 `SystemMouseCursors.text` 文本光标、弹出操作浮层（复制、全选、自定义操作回调）以及一键切换显示/隐藏高亮框动画。
+4. **实况文本交互层 (`OcrLiveTextOverlay`)：零 `setState` 局部重绘 + `OcrLiveTextStrings` 国际化配置**：
+   - 内部完全剔除粗粒度 `setState`，通过 `ValueNotifier`、`ValueListenableBuilder` 以及 `CustomPainter(repaint: Listenable.merge(...))` 精确控制刷新粒度：鼠标悬停、拖拽选框、点击选中仅触发 Canvas 画布或顶部浮动工具栏局部更新，底层原图绝不重绘。
+   - 提供 **`OcrLiveTextStrings`** 对象统一接收所有 UI 文案（内置英文默认、`OcrLiveTextStrings.zhCN()` 简体中文、`OcrLiveTextStrings.jaJP()` 日文预设，以及自定义格式化回调），无缝对接多语言国际化系统。
 
 ## 安装与集成
 
-在项目的 `pubspec.yaml` 中添加依赖：
+在项目的 `pubspec.yaml` 中添加依赖（示例项目同时集成了 `xue_hua_file_operations: ^1.5.2` 实现六端选图识别）：
 
 ```yaml
 dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.8.0
+  xue_hua_file_operations: ^1.5.2
   xue_hua_navite_rapid_ocr: ^1.0.0
 ```
 
-### 配置 ONNX 模型与字典资源
+## 多语言（80+ 语种）集成完整指南 (`OcrLanguage` & `OcrModelConfig`)
 
-将 PP-OCRv4 或 PP-OCRv5 的 `.onnx` 模型与 `keys.txt` 字典放入项目的 `assets/models/` 并在 `pubspec.yaml` 中声明：
+`xue_hua_navite_rapid_ocr` 支持通过切换 PP-OCRv4 / PP-OCRv5 的识别模型（`rec.onnx`）与对应字符字典（`keys.txt`）实现 80+ 语言离线识别。
+
+### 1. 多语言枚举与推荐模型对照表
+
+| `OcrLanguage` 枚举值 | 支持语言范围 | 推荐检测模型 (`det.onnx`) | 推荐识别模型 (`rec.onnx`) | 推荐字典文件 (`keys.txt`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `OcrLanguage.chineseAndEnglish` | 简体中文、繁体中文、英文、数字（默认） | `ch_PP-OCRv4_det_infer.onnx` | `ch_PP-OCRv4_rec_infer.onnx` | `ppocr_keys_v1.txt` |
+| `OcrLanguage.english` | 纯英文、数字、符号高速识别 | `ch_PP-OCRv4_det_infer.onnx` | `en_PP-OCRv4_rec_infer.onnx` | `en_dict.txt` |
+| `OcrLanguage.japanese` | 日语（汉字、平假名、片假名）、英文 | `Multilingual_PP-OCRv3_det_infer.onnx` | `japan_PP-OCRv4_rec_infer.onnx` | `japan_dict.txt` |
+| `OcrLanguage.korean` | 韩语（谚文）、英文 | `Multilingual_PP-OCRv3_det_infer.onnx` | `korean_PP-OCRv4_rec_infer.onnx` | `korean_dict.txt` |
+| `OcrLanguage.latin` | 法语、德语、西班牙语、意大利语、葡萄牙语等拉丁语系 | `Multilingual_PP-OCRv3_det_infer.onnx` | `latin_PP-OCRv3_rec_infer.onnx` | `latin_dict.txt` |
+| `OcrLanguage.cyrillic` | 俄语、乌克兰语、白俄罗斯语、保加利亚语等西里尔字母 | `Multilingual_PP-OCRv3_det_infer.onnx` | `cyrillic_PP-OCRv3_rec_infer.onnx` | `cyrillic_dict.txt` |
+| `OcrLanguage.arabic` | 阿拉伯语、波斯语、维吾尔语、乌尔都语 | `Multilingual_PP-OCRv3_det_infer.onnx` | `arabic_PP-OCRv4_rec_infer.onnx` | `arabic_dict.txt` |
+| `OcrLanguage.multilingual` | 自定义 80+ 语种模型 | 自定义 `det.onnx` 路径或 URL | 自定义 `rec.onnx` 路径或 URL | 自定义 `keys.txt` 路径或 URL |
+
+### 2. 在 `pubspec.yaml` 中声明多语言模型资源
 
 ```yaml
 flutter:
   assets:
-    - assets/models/ch_PP-OCRv4_det_infer.onnx
+    # 通用 180° 方向分类器
     - assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+    # 默认中英混排模型
+    - assets/models/ch_PP-OCRv4_det_infer.onnx
     - assets/models/ch_PP-OCRv4_rec_infer.onnx
     - assets/models/ppocr_keys_v1.txt
+    # 多语言检测模型 + 日语 / 韩语 / 拉丁语 / 俄语 / 阿拉伯语识别模型与字典
+    - assets/models/Multilingual_PP-OCRv3_det_infer.onnx
+    - assets/models/japan_PP-OCRv4_rec_infer.onnx
+    - assets/models/japan_dict.txt
+    - assets/models/korean_PP-OCRv4_rec_infer.onnx
+    - assets/models/korean_dict.txt
+    - assets/models/latin_PP-OCRv3_rec_infer.onnx
+    - assets/models/latin_dict.txt
 ```
 
-## 快速上手与完整使用示例
+### 3. 初始化与运行时动态切换多语言
 
-### 1. 初始化引擎 (`initialize`)
+使用 `OcrModelConfig.forLanguage(...)` 工厂方法可自动填充对应语言的默认资源路径，也可手动传入自定义路径、CDN URL 或内存字节：
 
 ```dart
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
 final ocr = XueHuaNaviteRapidOcr.instance;
 
+// 1. 使用中英混排模型初始化
+await ocr.initialize(
+  OcrModelConfig.forLanguage(
+    OcrLanguage.chineseAndEnglish,
+    executionProvider: OcrExecutionProvider.auto,
+  ),
+);
+
+// 2. 运行时动态切换为日语、韩语、俄语或阿拉伯语模型（内部自动安全重建 Isolate / Web Worker 会话）
+await ocr.initialize(
+  OcrModelConfig.forLanguage(
+    OcrLanguage.japanese,
+    executionProvider: OcrExecutionProvider.auto,
+  ),
+);
+
+// 3. 或者完全自定义任意语种的 det / cls / rec / keys 路径或 Web CDN 地址
 await ocr.initialize(
   const OcrModelConfig(
-    language: OcrLanguage.chineseAndEnglish, // 或 OcrLanguage.multilingual (80+ 语言)
-    executionProvider: OcrExecutionProvider.auto, // 自动选择 CoreML / NNAPI / DirectML / WebGPU / WASM
-    detModelPathOrUrl: 'assets/models/ch_PP-OCRv4_det_infer.onnx',
+    language: OcrLanguage.multilingual,
+    detModelPathOrUrl: 'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
     clsModelPathOrUrl: 'assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx',
-    recModelPathOrUrl: 'assets/models/ch_PP-OCRv4_rec_infer.onnx',
-    keysPathOrUrl: 'assets/models/ppocr_keys_v1.txt',
-    numThreads: 4,
-    enableHardwareAcceleration: true,
-    enableWebModelCache: true,
+    recModelPathOrUrl: 'assets/models/arabic_PP-OCRv4_rec_infer.onnx',
+    keysPathOrUrl: 'assets/models/arabic_dict.txt',
   ),
 );
 ```
 
-### 2. 三种全平台通用识别入口
+## 结合 `xue_hua_file_operations` 选图识别与 `OcrLiveTextOverlay` 国际化示例
 
 ```dart
-// 方式 1：从本地文件路径（Native）或 Blob / Data / HTTP / Asset URL（Web）识别
-final OcrResult fileResult = await ocr.recognizeFile(
-  '/path/to/document.jpg',
-  options: const OcrRecognizeOptions(
-    maxSideLen: 960,
-    boxThresh: 0.5,
-    boxScoreThresh: 0.6,
-    unclipRatio: 1.6,
-    doAngle: true,
-    mostAngle: true,
-    minConfidence: 0.3,
-  ),
-);
+import 'package:material_ui/material_ui.dart';
+import 'package:xue_hua_file_operations/xue_hua_file_operations.dart';
+import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
-// 方式 2：从内存编码字节识别（适用于截图、文件选择器、网络图片缓存 Uint8List）
-final OcrResult bytesResult = await ocr.recognizeBytes(encodedPngOrJpegBytes);
+class OcrScannerDemo extends StatefulWidget {
+  const OcrScannerDemo({super.key});
 
-// 方式 3：从原始像素缓冲区识别（适用于相机流 NV21/BGRA8888 或 ui.Image 导出的 RGBA8888）
-final OcrResult pixelResult = await ocr.recognizeRawPixels(
-  pixels: rawRgbaBytes,
-  width: 1920,
-  height: 1080,
-  format: OcrPixelFormat.rgba8888,
-  rowStride: 1920 * 4,
-);
+  @override
+  State<OcrScannerDemo> createState() => _OcrScannerDemoState();
+}
 
-// 获取聚类后的段落文本、Markdown 与 JSON
-print(bytesResult.fullText);
-print(bytesResult.toMarkdown());
-print(bytesResult.toJson());
-```
+class _OcrScannerDemoState extends State<OcrScannerDemo> {
+  final XueHuaNaviteRapidOcr _ocr = XueHuaNaviteRapidOcr();
+  final XueHuaFileOperations _fileOps = XueHuaFileOperations.instance;
+  final OcrLiveTextController _liveTextController = OcrLiveTextController();
 
-### 3. 使用实况文本交互层 (`OcrLiveTextOverlay`)
+  PlatformFile? _pickedFile;
+  OcrResult? _ocrResult;
 
-```dart
-OcrLiveTextOverlay(
-  image: MemoryImage(encodedPngBytes),
-  ocrResult: bytesResult,
-  fit: BoxFit.contain,
-  onSelectionChanged: (String selectedText, List<OcrTextLine> selectedLines) {
-    debugPrint('当前选中文本: $selectedText');
-  },
-  onTextCopied: (String copiedText) {
-    debugPrint('已复制到剪贴板: $copiedText');
-  },
-  customActions: [
-    OcrLiveTextCustomAction(
-      label: '分享选中文字',
-      icon: Icons.share_rounded,
-      onPressed: (selectedText, selectedLines) {
-        // 调用分享或翻译逻辑
-      },
-    ),
-  ],
-)
-```
+  @override
+  void initState() {
+    super.initState();
+    _ocr.initialize(
+      OcrModelConfig.forLanguage(OcrLanguage.chineseAndEnglish),
+    );
+  }
 
-### 4. 释放引擎资源 (`dispose`)
+  Future<void> _pickImageAndRecognize() async {
+    // 使用 xue_hua_file_operations 跨六端选择图片
+    final PlatformFile? file = await _fileOps.pickFile(
+      type: FileType.image,
+      withData: true,
+    );
+    if (file == null || file.bytes == null) return;
 
-```dart
-await ocr.dispose();
+    final OcrResult result = await _ocr.recognizeBytes(file.bytes!);
+    setState(() {
+      _pickedFile = file;
+      _ocrResult = result;
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveTextController.dispose();
+    _ocr.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('选图 OCR 识别'),
+        actions: <Widget>[
+          FilledButton(
+            onPressed: _pickImageAndRecognize,
+            child: const Text('选择图片并识别'),
+          ),
+        ],
+      ),
+      body: _pickedFile?.bytes != null && _ocrResult != null
+          ? OcrLiveTextOverlay(
+              image: MemoryImage(_pickedFile!.bytes!),
+              ocrResult: _ocrResult!,
+              controller: _liveTextController,
+              // 使用 OcrLiveTextStrings.zhCN() 或自定义所有国际化文案
+              strings: OcrLiveTextStrings(
+                copyButtonLabel: '复制选中',
+                selectAllButtonLabel: '全选文字',
+                clearSelectionTooltip: '清除选区',
+                hideHighlightsTooltip: '隐藏实况文本高亮框',
+                showHighlightsTooltip: '显示实况文本高亮框',
+                selectedCountBuilder: (int count) => '已选 $count 行',
+                copiedSnackBarMessageBuilder: (int count) =>
+                    '已成功复制 $count 行文字到剪贴板',
+              ),
+              onSelectionChanged: (String selectedText, List<OcrTextLine> lines) {
+                debugPrint('当前选中文本: $selectedText');
+              },
+            )
+          : const Center(child: Text('请点击右上角选择图片进行 OCR 识别')),
+    );
+  }
+}
 ```
 
 ## AI 编程助手 Skills 支持 (`package:skills`)
@@ -152,10 +217,9 @@ dart run skills@ get
 
 ## 注意事项与最佳实践
 
-1. **严禁直接导入平台内部实现文件**：请始终通过 `import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';` 导入插件，切勿直接导入 `ocr_engine_ffi.dart` 或 `ocr_engine_web.dart`。
-2. **EXIF 方向自动修正**：手机拍摄的照片通常带有 EXIF 旋转标记（`1..8`）。C++ 层与 Web Worker 层均会自动修正方向，返回的 `cornerPoints` 顶点坐标与修正后的 `result.imageWidth`、`result.imageHeight` 完全对齐。
-3. **相机流 `rowStride` 对齐**：在使用 `recognizeRawPixels` 处理相机预览帧时，若图像行存在内存对齐填充字节，请务必传入准确的 `rowStride`（即 `plane.bytesPerRow`）。
-4. **生命周期管理**：建议在应用或页面级复用 `XueHuaNaviteRapidOcr` 实例，避免频繁重新加载 `.onnx` 模型；在不再需要时调用 `await ocr.dispose()` 释放 C++ 内存与 Isolate / Web Worker。
+1. **统一使用 `package:material_ui/material_ui.dart`**：本插件与示例项目全面迁移至 Flutter 官方解耦的 `material_ui` 包，严禁混用旧版 `package:flutter/material.dart`。
+2. **局部精准刷新（零 `setState`）**：`OcrLiveTextOverlay` 内部通过 `ValueNotifier` 与 `CustomPainter(repaint: ...)` 局部刷新画布与工具栏，不会重绘底层图片。
+3. **EXIF 方向自动修正**：手机拍摄的照片常带有 EXIF 旋转标记（`1..8`）。C++ 层与 Web Worker 层均会自动修正方向，返回的 `cornerPoints` 顶点坐标与修正后的 `result.imageWidth`、`result.imageHeight` 完全对齐。
 
 ## 开源协议 (License)
 

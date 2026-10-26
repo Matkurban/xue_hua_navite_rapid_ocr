@@ -13,6 +13,7 @@ import '../models/ocr_models.dart';
 import '../models/paragraph_clusterer.dart';
 import 'ffi_bindings.dart';
 import 'ocr_engine_interface.dart';
+import 'ocr_ffi_messages.dart';
 
 /// Factory exported on Native platforms (`dart.library.ffi`).
 OcrPlatformEngine createPlatformOcrEngine() => OcrEngineFfi();
@@ -35,8 +36,7 @@ ffi.DynamicLibrary? _tryOpenDynamicLibrary() {
       return ffi.DynamicLibrary.open('$_kLibName.dll');
     }
   } catch (_) {
-    // When running in pure `flutter test` VM host without compiled native shared library,
-    // allow graceful fallback inside the Worker Isolate so unit tests work out of the box.
+    // Allow graceful fallback inside the Worker Isolate during host VM unit tests.
     return null;
   }
   return null;
@@ -86,7 +86,7 @@ class OcrEngineFfi implements OcrPlatformEngine {
         }
         return;
       }
-      if (message is _WorkerResponse) {
+      if (message is FfiWorkerResponse) {
         final Completer<dynamic>? completer = _pendingRequests.remove(
           message.requestId,
         );
@@ -110,7 +110,7 @@ class OcrEngineFfi implements OcrPlatformEngine {
     _workerSendPort = await handshakeCompleter.future;
 
     await _sendCommand<bool>(
-      _InitCommand(
+      FfiInitCommand(
         detPath: _isLocalFilePath(config.detModelPathOrUrl)
             ? config.detModelPathOrUrl
             : null,
@@ -167,7 +167,10 @@ class OcrEngineFfi implements OcrPlatformEngine {
     final OcrRecognizeOptions effectiveOptions =
         options ?? const OcrRecognizeOptions();
     return _sendCommand<OcrResult>(
-      _RecognizeFileCommand(filePath: filePathOrUrl, options: effectiveOptions),
+      FfiRecognizeFileCommand(
+        filePath: filePathOrUrl,
+        options: effectiveOptions,
+      ),
     );
   }
 
@@ -183,7 +186,7 @@ class OcrEngineFfi implements OcrPlatformEngine {
     final OcrRecognizeOptions effectiveOptions =
         options ?? const OcrRecognizeOptions();
     return _sendCommand<OcrResult>(
-      _RecognizeBytesCommand(
+      FfiRecognizeBytesCommand(
         transferableBytes: TransferableTypedData.fromList(<Uint8List>[
           encodedBytes,
         ]),
@@ -210,7 +213,7 @@ class OcrEngineFfi implements OcrPlatformEngine {
     final OcrRecognizeOptions effectiveOptions =
         options ?? const OcrRecognizeOptions();
     return _sendCommand<OcrResult>(
-      _RecognizeRawPixelsCommand(
+      FfiRecognizeRawPixelsCommand(
         transferablePixels: TransferableTypedData.fromList(<Uint8List>[pixels]),
         width: width,
         height: height,
@@ -225,7 +228,7 @@ class OcrEngineFfi implements OcrPlatformEngine {
   Future<void> dispose() async {
     if (_workerSendPort != null) {
       try {
-        await _sendCommand<bool>(const _DisposeCommand());
+        await _sendCommand<bool>(const FfiDisposeCommand());
       } catch (_) {}
     }
     _mainReceivePort?.close();
@@ -254,11 +257,11 @@ class OcrEngineFfi implements OcrPlatformEngine {
     }
   }
 
-  Future<T> _sendCommand<T>(_WorkerCommand command) {
+  Future<T> _sendCommand<T>(FfiWorkerCommand command) {
     final int requestId = _nextRequestId++;
     final Completer<T> completer = Completer<T>();
     _pendingRequests[requestId] = completer;
-    _workerSendPort!.send(_WorkerEnvelope(requestId, command));
+    _workerSendPort!.send(FfiWorkerEnvelope(requestId, command));
     return completer.future;
   }
 
@@ -303,100 +306,6 @@ class OcrEngineFfi implements OcrPlatformEngine {
   }
 }
 
-sealed class _WorkerCommand {
-  const _WorkerCommand();
-}
-
-final class _InitCommand extends _WorkerCommand {
-  const _InitCommand({
-    required this.detPath,
-    required this.clsPath,
-    required this.recPath,
-    required this.keysPath,
-    required this.detBytes,
-    required this.clsBytes,
-    required this.recBytes,
-    required this.keysText,
-    required this.numThreads,
-    required this.executionProvider,
-    required this.executionProviderName,
-    required this.enableHardwareAcceleration,
-  });
-
-  final String? detPath;
-  final String? clsPath;
-  final String? recPath;
-  final String? keysPath;
-  final TransferableTypedData? detBytes;
-  final TransferableTypedData? clsBytes;
-  final TransferableTypedData? recBytes;
-  final String? keysText;
-  final int numThreads;
-  final int executionProvider;
-  final String executionProviderName;
-  final bool enableHardwareAcceleration;
-}
-
-final class _RecognizeFileCommand extends _WorkerCommand {
-  const _RecognizeFileCommand({required this.filePath, required this.options});
-
-  final String filePath;
-  final OcrRecognizeOptions options;
-}
-
-final class _RecognizeBytesCommand extends _WorkerCommand {
-  const _RecognizeBytesCommand({
-    required this.transferableBytes,
-    required this.options,
-  });
-
-  final TransferableTypedData transferableBytes;
-  final OcrRecognizeOptions options;
-}
-
-final class _RecognizeRawPixelsCommand extends _WorkerCommand {
-  const _RecognizeRawPixelsCommand({
-    required this.transferablePixels,
-    required this.width,
-    required this.height,
-    required this.rowStride,
-    required this.pixelFormat,
-    required this.options,
-  });
-
-  final TransferableTypedData transferablePixels;
-  final int width;
-  final int height;
-  final int rowStride;
-  final int pixelFormat;
-  final OcrRecognizeOptions options;
-}
-
-final class _DisposeCommand extends _WorkerCommand {
-  const _DisposeCommand();
-}
-
-final class _WorkerEnvelope {
-  const _WorkerEnvelope(this.requestId, this.command);
-
-  final int requestId;
-  final _WorkerCommand command;
-}
-
-final class _WorkerResponse {
-  const _WorkerResponse({
-    required this.requestId,
-    this.payload,
-    this.errorMessage,
-    this.errorCode,
-  });
-
-  final int requestId;
-  final dynamic payload;
-  final String? errorMessage;
-  final int? errorCode;
-}
-
 /// Entry point for the dedicated background Worker Isolate.
 void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
   final ReceivePort workerReceivePort = ReceivePort();
@@ -411,13 +320,13 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
   String activeProviderName = 'cpu';
 
   workerReceivePort.listen((dynamic message) {
-    if (message is! _WorkerEnvelope) return;
+    if (message is! FfiWorkerEnvelope) return;
     final int reqId = message.requestId;
-    final _WorkerCommand cmd = message.command;
+    final FfiWorkerCommand cmd = message.command;
 
     try {
       switch (cmd) {
-        case _InitCommand():
+        case FfiInitCommand():
           activeProviderName = cmd.executionProviderName;
           if (bindings != null) {
             if (nativeHandle != null && nativeHandle != ffi.nullptr) {
@@ -515,9 +424,9 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               );
             }
           }
-          mainSendPort.send(_WorkerResponse(requestId: reqId, payload: true));
+          mainSendPort.send(FfiWorkerResponse(requestId: reqId, payload: true));
 
-        case _RecognizeFileCommand():
+        case FfiRecognizeFileCommand():
           if (bindings != null &&
               nativeHandle != null &&
               nativeHandle != ffi.nullptr) {
@@ -542,7 +451,7 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               );
             });
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: result),
+              FfiWorkerResponse(requestId: reqId, payload: result),
             );
           } else {
             final File file = File(cmd.filePath);
@@ -561,11 +470,11 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               providerName: activeProviderName,
             );
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: fallbackResult),
+              FfiWorkerResponse(requestId: reqId, payload: fallbackResult),
             );
           }
 
-        case _RecognizeBytesCommand():
+        case FfiRecognizeBytesCommand():
           final Uint8List bytes = cmd.transferableBytes
               .materialize()
               .asUint8List();
@@ -595,7 +504,7 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               );
             });
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: result),
+              FfiWorkerResponse(requestId: reqId, payload: result),
             );
           } else {
             final OcrResult fallbackResult = _runPureDartFallbackPipeline(
@@ -606,11 +515,11 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               providerName: activeProviderName,
             );
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: fallbackResult),
+              FfiWorkerResponse(requestId: reqId, payload: fallbackResult),
             );
           }
 
-        case _RecognizeRawPixelsCommand():
+        case FfiRecognizeRawPixelsCommand():
           final Uint8List rawPixels = cmd.transferablePixels
               .materialize()
               .asUint8List();
@@ -643,7 +552,7 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               );
             });
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: result),
+              FfiWorkerResponse(requestId: reqId, payload: result),
             );
           } else {
             final OcrResult fallbackResult = _runPureDartFallbackPipeline(
@@ -654,23 +563,23 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               providerName: activeProviderName,
             );
             mainSendPort.send(
-              _WorkerResponse(requestId: reqId, payload: fallbackResult),
+              FfiWorkerResponse(requestId: reqId, payload: fallbackResult),
             );
           }
 
-        case _DisposeCommand():
+        case FfiDisposeCommand():
           if (bindings != null &&
               nativeHandle != null &&
               nativeHandle != ffi.nullptr) {
             bindings.xue_hua_rapid_ocr_destroy(nativeHandle!);
             nativeHandle = null;
           }
-          mainSendPort.send(_WorkerResponse(requestId: reqId, payload: true));
+          mainSendPort.send(FfiWorkerResponse(requestId: reqId, payload: true));
           workerReceivePort.close();
       }
     } on XueHuaOcrException catch (e) {
       mainSendPort.send(
-        _WorkerResponse(
+        FfiWorkerResponse(
           requestId: reqId,
           errorMessage: e.message,
           errorCode: e.code,
@@ -678,7 +587,7 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
       );
     } catch (e) {
       mainSendPort.send(
-        _WorkerResponse(
+        FfiWorkerResponse(
           requestId: reqId,
           errorMessage: e.toString(),
           errorCode: -99,

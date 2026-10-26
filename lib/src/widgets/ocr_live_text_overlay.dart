@@ -1,89 +1,39 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
-import '../models/ocr_models.dart';
+import '../models/ocr_result.dart';
+import '../models/ocr_text_line.dart';
+import 'ocr_image_coordinate_transform.dart';
+import 'ocr_live_text_controller.dart';
+import 'ocr_live_text_custom_action.dart';
+import 'ocr_live_text_painter.dart';
+import 'ocr_live_text_strings.dart';
 
-/// Custom action item displayed inside the [OcrLiveTextOverlay] floating selection toolbar.
-class OcrLiveTextCustomAction {
-  const OcrLiveTextCustomAction({
-    required this.label,
-    required this.onPressed,
-    this.icon,
-  });
-
-  /// Button label shown in the floating selection bar.
-  final String label;
-
-  /// Optional leading icon.
-  final IconData? icon;
-
-  /// Callback invoked with the currently selected text and selected [OcrTextLine]s.
-  final void Function(String selectedText, List<OcrTextLine> selectedLines)
-  onPressed;
-}
-
-/// Controller for programmatically interacting with an [OcrLiveTextOverlay].
-class OcrLiveTextController extends ChangeNotifier {
-  final Set<int> _selectedIndices = <int>{};
-  bool _showHighlightBoxes = true;
-
-  /// Set of currently selected [OcrTextLine] indices.
-  Set<int> get selectedIndices => Set<int>.unmodifiable(_selectedIndices);
-
-  /// Whether all recognized text highlight boxes are currently visible.
-  bool get showHighlightBoxes => _showHighlightBoxes;
-
-  /// Toggles the visibility of all recognized text highlight boxes.
-  void toggleHighlightBoxes([bool? visible]) {
-    final bool next = visible ?? !_showHighlightBoxes;
-    if (_showHighlightBoxes != next) {
-      _showHighlightBoxes = next;
-      notifyListeners();
-    }
-  }
-
-  /// Selects all lines `[0 .. totalLines - 1]`.
-  void selectAll(int totalLines) {
-    _selectedIndices
-      ..clear()
-      ..addAll(List<int>.generate(totalLines, (int i) => i));
-    notifyListeners();
-  }
-
-  /// Clears the current selection.
-  void clearSelection() {
-    if (_selectedIndices.isNotEmpty) {
-      _selectedIndices.clear();
-      notifyListeners();
-    }
-  }
-
-  /// Replaces the current selection with [indices].
-  void setSelection(Iterable<int> indices) {
-    _selectedIndices
-      ..clear()
-      ..addAll(indices);
-    notifyListeners();
-  }
-}
+export 'ocr_image_coordinate_transform.dart';
+export 'ocr_live_text_controller.dart';
+export 'ocr_live_text_custom_action.dart';
+export 'ocr_live_text_painter.dart';
+export 'ocr_live_text_strings.dart';
 
 /// Interactive 6-platform "Live Text" overlay widget (`OcrLiveTextOverlay`).
 ///
-/// Renders the source [image] alongside rotated quadrilateral highlights for every
-/// [OcrTextLine] in [ocrResult], supporting:
-/// - Single tap on a text box to select/deselect or immediately copy.
-/// - Touch drag or mouse marquee/lasso drag selection across multiple rotated text lines.
-/// - Automatic `SystemMouseCursors.text` cursor when hovering over any recognized text polygon on Desktop/Web.
-/// - Floating contextual action bar with "Copy", "Select All", "Clear", and custom actions.
-/// - Smooth animated toggle to show/hide all text highlight boxes.
+/// Built with `package:material_ui/material_ui.dart` and fine-grained
+/// [ValueNotifier] / [ValueListenableBuilder] / `CustomPainter(repaint: ...)` updates
+/// (zero full-widget `setState` calls):
+/// - Pointer hover only updates `_hoveredLineIndexNotifier` (`MouseRegion` cursor + `CustomPainter`).
+/// - Drag marquee only updates `_dragMarqueeNotifier` and `_controller.selectedIndicesListenable`.
+/// - Floating toolbar only rebuilds when `_controller.selectedIndicesListenable` changes.
+/// - Corner toggle button only rebuilds when `_controller.showHighlightBoxesListenable` changes.
+/// - All user-visible strings are customizable via [OcrLiveTextStrings] ([strings]) for i18n.
 class OcrLiveTextOverlay extends StatefulWidget {
   const OcrLiveTextOverlay({
     super.key,
     required this.image,
     required this.ocrResult,
     this.controller,
+    this.strings = const OcrLiveTextStrings(),
     this.fit = BoxFit.contain,
     this.initialShowHighlights = true,
     this.showFloatingToolbar = true,
@@ -109,6 +59,9 @@ class OcrLiveTextOverlay extends StatefulWidget {
 
   /// Optional external controller for programmatic selection and highlight toggling.
   final OcrLiveTextController? controller;
+
+  /// Customizable localization strings for all buttons, tooltips, and SnackBar messages.
+  final OcrLiveTextStrings strings;
 
   /// How the image and OCR coordinate space should be inscribed into the layout box.
   final BoxFit fit;
@@ -166,9 +119,12 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   bool _ownsController = false;
   late AnimationController _fadeController;
 
-  int? _hoveredLineIndex;
+  /// Fine-grained notifiers for hover and marquee selection (avoids `setState`).
+  final ValueNotifier<int?> _hoveredLineIndexNotifier = ValueNotifier<int?>(
+    null,
+  );
+  final ValueNotifier<Rect?> _dragMarqueeNotifier = ValueNotifier<Rect?>(null);
   Offset? _dragStartLocal;
-  Offset? _dragCurrentLocal;
 
   @override
   void initState() {
@@ -176,11 +132,14 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
     if (widget.controller != null) {
       _controller = widget.controller!;
     } else {
-      _controller = OcrLiveTextController()
-        ..toggleHighlightBoxes(widget.initialShowHighlights);
+      _controller = OcrLiveTextController(
+        initialShowHighlights: widget.initialShowHighlights,
+      );
       _ownsController = true;
     }
-    _controller.addListener(_onControllerChanged);
+    _controller.showHighlightBoxesListenable.addListener(
+      _onHighlightVisibilityChanged,
+    );
 
     _fadeController = AnimationController(
       vsync: this,
@@ -193,7 +152,9 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   void didUpdateWidget(covariant OcrLiveTextOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      _controller.removeListener(_onControllerChanged);
+      _controller.showHighlightBoxesListenable.removeListener(
+        _onHighlightVisibilityChanged,
+      );
       if (_ownsController) {
         _controller.dispose();
       }
@@ -201,36 +162,41 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
         _controller = widget.controller!;
         _ownsController = false;
       } else {
-        _controller = OcrLiveTextController()
-          ..toggleHighlightBoxes(widget.initialShowHighlights);
+        _controller = OcrLiveTextController(
+          initialShowHighlights: widget.initialShowHighlights,
+        );
         _ownsController = true;
       }
-      _controller.addListener(_onControllerChanged);
+      _controller.showHighlightBoxesListenable.addListener(
+        _onHighlightVisibilityChanged,
+      );
     }
     if (oldWidget.ocrResult != widget.ocrResult) {
       _controller.clearSelection();
-      _hoveredLineIndex = null;
+      _hoveredLineIndexNotifier.value = null;
+      _dragMarqueeNotifier.value = null;
     }
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChanged);
+    _controller.showHighlightBoxesListenable.removeListener(
+      _onHighlightVisibilityChanged,
+    );
     if (_ownsController) {
       _controller.dispose();
     }
+    _hoveredLineIndexNotifier.dispose();
+    _dragMarqueeNotifier.dispose();
     _fadeController.dispose();
     super.dispose();
   }
 
-  void _onControllerChanged() {
+  void _onHighlightVisibilityChanged() {
     if (_controller.showHighlightBoxes) {
       _fadeController.forward();
     } else {
       _fadeController.reverse();
-    }
-    if (mounted) {
-      setState(() {});
     }
   }
 
@@ -250,14 +216,15 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   }
 
   Future<void> _copySelectedText() async {
-    final String text = _selectedText;
-    if (text.isEmpty) return;
+    final List<OcrTextLine> lines = _selectedLines;
+    if (lines.isEmpty) return;
+    final String text = lines.map((OcrTextLine l) => l.text).join('\n');
     await Clipboard.setData(ClipboardData(text: text));
     widget.onTextCopied?.call(text);
     if (mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text('Copied ${_selectedLines.length} line(s) to clipboard'),
+          content: Text(widget.strings.formatCopiedMessage(lines.length)),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
@@ -273,23 +240,18 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
           constraints.maxWidth.isFinite ? constraints.maxWidth : 640,
           constraints.maxHeight.isFinite ? constraints.maxHeight : 480,
         );
-        final _ImageCoordinateTransform transform =
-            _ImageCoordinateTransform.compute(
+        final OcrImageCoordinateTransform transform =
+            OcrImageCoordinateTransform.compute(
               containerSize: containerSize,
               imageWidth: math.max(1, widget.ocrResult.imageWidth).toDouble(),
               imageHeight: math.max(1, widget.ocrResult.imageHeight).toDouble(),
               fit: widget.fit,
             );
 
-        final Rect? dragRect =
-            (_dragStartLocal != null && _dragCurrentLocal != null)
-            ? Rect.fromPoints(_dragStartLocal!, _dragCurrentLocal!)
-            : null;
-
         return Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            // 1. Underlying Image
+            // 1. Underlying Image (never rebuilt on hover/selection/drag)
             Image(
               image: widget.image,
               fit: widget.fit,
@@ -297,29 +259,32 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
               height: containerSize.height,
             ),
 
-            // 2. Interactive MouseRegion + GestureDetector + CustomPaint Overlay
-            MouseRegion(
-              cursor: _hoveredLineIndex != null
-                  ? SystemMouseCursors.text
-                  : SystemMouseCursors.basic,
-              onHover: (PointerHoverEvent event) {
-                final int? hit = _hitTestLineIndex(
-                  event.localPosition,
-                  transform,
-                );
-                if (hit != _hoveredLineIndex) {
-                  setState(() {
-                    _hoveredLineIndex = hit;
-                  });
-                }
-              },
-              onExit: (_) {
-                if (_hoveredLineIndex != null) {
-                  setState(() {
-                    _hoveredLineIndex = null;
-                  });
-                }
-              },
+            // 2. Interactive MouseRegion + GestureDetector + Repaint-Driven CustomPaint
+            ValueListenableBuilder<int?>(
+              valueListenable: _hoveredLineIndexNotifier,
+              builder:
+                  (BuildContext context, int? hoveredIndex, Widget? child) {
+                    return MouseRegion(
+                      cursor: hoveredIndex != null
+                          ? SystemMouseCursors.text
+                          : SystemMouseCursors.basic,
+                      onHover: (PointerHoverEvent event) {
+                        final int? hit = _hitTestLineIndex(
+                          event.localPosition,
+                          transform,
+                        );
+                        if (_hoveredLineIndexNotifier.value != hit) {
+                          _hoveredLineIndexNotifier.value = hit;
+                        }
+                      },
+                      onExit: (_) {
+                        if (_hoveredLineIndexNotifier.value != null) {
+                          _hoveredLineIndexNotifier.value = null;
+                        }
+                      },
+                      child: child,
+                    );
+                  },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapUp: (TapUpDetails details) {
@@ -349,166 +314,194 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                   }
                 },
                 onPanStart: (DragStartDetails details) {
-                  setState(() {
-                    _dragStartLocal = details.localPosition;
-                    _dragCurrentLocal = details.localPosition;
-                  });
+                  _dragStartLocal = details.localPosition;
+                  _dragMarqueeNotifier.value = Rect.fromPoints(
+                    details.localPosition,
+                    details.localPosition,
+                  );
                 },
                 onPanUpdate: (DragUpdateDetails details) {
-                  setState(() {
-                    _dragCurrentLocal = details.localPosition;
-                  });
-                  if (_dragStartLocal != null && _dragCurrentLocal != null) {
+                  final Offset? start = _dragStartLocal;
+                  if (start != null) {
                     final Rect marquee = Rect.fromPoints(
-                      _dragStartLocal!,
-                      _dragCurrentLocal!,
+                      start,
+                      details.localPosition,
                     );
+                    _dragMarqueeNotifier.value = marquee;
                     final Set<int> hits = _hitTestMarquee(marquee, transform);
                     _controller.setSelection(hits);
                   }
                 },
                 onPanEnd: (DragEndDetails details) {
-                  setState(() {
-                    _dragStartLocal = null;
-                    _dragCurrentLocal = null;
-                  });
+                  _dragStartLocal = null;
+                  _dragMarqueeNotifier.value = null;
                   _notifySelectionChanged();
                 },
                 onPanCancel: () {
-                  setState(() {
-                    _dragStartLocal = null;
-                    _dragCurrentLocal = null;
-                  });
+                  _dragStartLocal = null;
+                  _dragMarqueeNotifier.value = null;
                 },
-                child: AnimatedBuilder(
-                  animation: _fadeController,
-                  builder: (BuildContext context, Widget? child) {
-                    return CustomPaint(
-                      painter: _OcrLiveTextPainter(
-                        lines: widget.ocrResult.lines,
-                        transform: transform,
-                        selectedIndices: _controller.selectedIndices,
-                        hoveredIndex: _hoveredLineIndex,
-                        highlightOpacity: _fadeController.value,
-                        dragMarqueeRect: dragRect,
-                        highlightFillColor: widget.highlightFillColor,
-                        highlightBorderColor: widget.highlightBorderColor,
-                        selectedFillColor: widget.selectedFillColor,
-                        selectedBorderColor: widget.selectedBorderColor,
-                        hoveredFillColor: widget.hoveredFillColor,
-                        marqueeFillColor: widget.marqueeFillColor,
-                        marqueeBorderColor: widget.marqueeBorderColor,
-                      ),
-                    );
-                  },
+                child: CustomPaint(
+                  painter: OcrLiveTextPainter(
+                    lines: widget.ocrResult.lines,
+                    transform: transform,
+                    selectedIndicesListenable:
+                        _controller.selectedIndicesListenable,
+                    hoveredIndexListenable: _hoveredLineIndexNotifier,
+                    highlightOpacityListenable: _fadeController,
+                    dragMarqueeListenable: _dragMarqueeNotifier,
+                    highlightFillColor: widget.highlightFillColor,
+                    highlightBorderColor: widget.highlightBorderColor,
+                    selectedFillColor: widget.selectedFillColor,
+                    selectedBorderColor: widget.selectedBorderColor,
+                    hoveredFillColor: widget.hoveredFillColor,
+                    marqueeFillColor: widget.marqueeFillColor,
+                    marqueeBorderColor: widget.marqueeBorderColor,
+                  ),
                 ),
               ),
             ),
 
-            // 3. Floating Selection Action Toolbar
-            if (widget.showFloatingToolbar &&
-                _controller.selectedIndices.isNotEmpty)
-              Positioned(
-                top: 12,
-                left: 12,
-                right: 12,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(24),
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: Wrap(
-                        spacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: <Widget>[
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Text(
-                              '${_controller.selectedIndices.length} selected',
-                              style: Theme.of(context).textTheme.labelMedium,
-                            ),
-                          ),
-                          TextButton.icon(
-                            key: const ValueKey<String>(
-                              'ocr_live_text_copy_btn',
-                            ),
-                            icon: const Icon(Icons.copy_rounded, size: 16),
-                            label: const Text('Copy'),
-                            onPressed: _copySelectedText,
-                          ),
-                          TextButton.icon(
-                            key: const ValueKey<String>(
-                              'ocr_live_text_select_all_btn',
-                            ),
-                            icon: const Icon(
-                              Icons.select_all_rounded,
-                              size: 16,
-                            ),
-                            label: const Text('Select All'),
-                            onPressed: () {
-                              _controller.selectAll(
-                                widget.ocrResult.lines.length,
-                              );
-                              _notifySelectionChanged();
-                            },
-                          ),
-                          for (final OcrLiveTextCustomAction action
-                              in widget.customActions)
-                            TextButton.icon(
-                              icon: Icon(
-                                action.icon ?? Icons.auto_awesome_rounded,
-                                size: 16,
+            // 3. Floating Selection Action Toolbar (isolated rebuild via ValueListenableBuilder)
+            if (widget.showFloatingToolbar)
+              ValueListenableBuilder<Set<int>>(
+                valueListenable: _controller.selectedIndicesListenable,
+                builder:
+                    (
+                      BuildContext context,
+                      Set<int> selectedIndices,
+                      Widget? _,
+                    ) {
+                      if (selectedIndices.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned(
+                        top: 12,
+                        left: 12,
+                        right: 12,
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Material(
+                            elevation: 6,
+                            borderRadius: BorderRadius.circular(24),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
                               ),
-                              label: Text(action.label),
-                              onPressed: () => action.onPressed(
-                                _selectedText,
-                                _selectedLines,
+                              child: Wrap(
+                                spacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: <Widget>[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                    ),
+                                    child: Text(
+                                      widget.strings.formatSelectedCount(
+                                        selectedIndices.length,
+                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium,
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    key: const ValueKey<String>(
+                                      'ocr_live_text_copy_btn',
+                                    ),
+                                    icon: const Icon(
+                                      Icons.copy_rounded,
+                                      size: 16,
+                                    ),
+                                    label: Text(widget.strings.copyButtonLabel),
+                                    onPressed: _copySelectedText,
+                                  ),
+                                  TextButton.icon(
+                                    key: const ValueKey<String>(
+                                      'ocr_live_text_select_all_btn',
+                                    ),
+                                    icon: const Icon(
+                                      Icons.select_all_rounded,
+                                      size: 16,
+                                    ),
+                                    label: Text(
+                                      widget.strings.selectAllButtonLabel,
+                                    ),
+                                    onPressed: () {
+                                      _controller.selectAll(
+                                        widget.ocrResult.lines.length,
+                                      );
+                                      _notifySelectionChanged();
+                                    },
+                                  ),
+                                  for (final OcrLiveTextCustomAction action
+                                      in widget.customActions)
+                                    TextButton.icon(
+                                      icon: Icon(
+                                        action.icon ??
+                                            Icons.auto_awesome_rounded,
+                                        size: 16,
+                                      ),
+                                      label: Text(action.label),
+                                      onPressed: () => action.onPressed(
+                                        _selectedText,
+                                        _selectedLines,
+                                      ),
+                                    ),
+                                  IconButton(
+                                    key: const ValueKey<String>(
+                                      'ocr_live_text_clear_btn',
+                                    ),
+                                    tooltip:
+                                        widget.strings.clearSelectionTooltip,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                    ),
+                                    onPressed: () {
+                                      _controller.clearSelection();
+                                      _notifySelectionChanged();
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
-                          IconButton(
-                            key: const ValueKey<String>(
-                              'ocr_live_text_clear_btn',
-                            ),
-                            tooltip: 'Clear selection',
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                            onPressed: () {
-                              _controller.clearSelection();
-                              _notifySelectionChanged();
-                            },
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                        ),
+                      );
+                    },
               ),
 
-            // 4. Corner Live Text Highlight Toggle Badge
+            // 4. Corner Live Text Highlight Toggle Badge (isolated rebuild via ValueListenableBuilder)
             if (widget.showToggleHighlightsButton)
-              Positioned(
-                bottom: 12,
-                right: 12,
-                child: FloatingActionButton.small(
-                  key: const ValueKey<String>('ocr_live_text_toggle_btn'),
-                  heroTag: null,
-                  tooltip: _controller.showHighlightBoxes
-                      ? 'Hide Live Text Highlights'
-                      : 'Show Live Text Highlights',
-                  onPressed: () => _controller.toggleHighlightBoxes(),
-                  child: Icon(
-                    _controller.showHighlightBoxes
-                        ? Icons.text_fields_rounded
-                        : Icons.visibility_off_outlined,
-                  ),
-                ),
+              ValueListenableBuilder<bool>(
+                valueListenable: _controller.showHighlightBoxesListenable,
+                builder:
+                    (BuildContext context, bool showHighlights, Widget? _) {
+                      return Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: FloatingActionButton.small(
+                          key: const ValueKey<String>(
+                            'ocr_live_text_toggle_btn',
+                          ),
+                          heroTag: null,
+                          tooltip: showHighlights
+                              ? widget.strings.hideHighlightsTooltip
+                              : widget.strings.showHighlightsTooltip,
+                          onPressed: () => _controller.toggleHighlightBoxes(),
+                          child: Icon(
+                            showHighlights
+                                ? Icons.text_fields_rounded
+                                : Icons.visibility_off_outlined,
+                          ),
+                        ),
+                      );
+                    },
               ),
           ],
         );
@@ -519,7 +512,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   /// Checks whether [localPoint] lies inside any rotated [OcrTextLine] quadrilateral.
   int? _hitTestLineIndex(
     Offset localPoint,
-    _ImageCoordinateTransform transform,
+    OcrImageCoordinateTransform transform,
   ) {
     final Offset imagePoint = transform.localToImage(localPoint);
     for (int i = widget.ocrResult.lines.length - 1; i >= 0; i--) {
@@ -534,7 +527,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   /// Finds all [OcrTextLine] indices whose transformed polygons intersect [localMarquee].
   Set<int> _hitTestMarquee(
     Rect localMarquee,
-    _ImageCoordinateTransform transform,
+    OcrImageCoordinateTransform transform,
   ) {
     final Set<int> selected = <int>{};
     for (int i = 0; i < widget.ocrResult.lines.length; i++) {
@@ -586,168 +579,5 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
       if (p.dy > maxY) maxY = p.dy;
     }
     return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
-}
-
-class _ImageCoordinateTransform {
-  const _ImageCoordinateTransform({
-    required this.scaleX,
-    required this.scaleY,
-    required this.offsetX,
-    required this.offsetY,
-  });
-
-  final double scaleX;
-  final double scaleY;
-  final double offsetX;
-  final double offsetY;
-
-  factory _ImageCoordinateTransform.compute({
-    required Size containerSize,
-    required double imageWidth,
-    required double imageHeight,
-    required BoxFit fit,
-  }) {
-    final Size inputSize = Size(imageWidth, imageHeight);
-    final FittedSizes fitted = applyBoxFit(fit, inputSize, containerSize);
-    final double scaleX = inputSize.width > 0
-        ? fitted.destination.width / inputSize.width
-        : 1.0;
-    final double scaleY = inputSize.height > 0
-        ? fitted.destination.height / inputSize.height
-        : 1.0;
-    final double offsetX =
-        (containerSize.width - fitted.destination.width) * 0.5;
-    final double offsetY =
-        (containerSize.height - fitted.destination.height) * 0.5;
-
-    return _ImageCoordinateTransform(
-      scaleX: scaleX,
-      scaleY: scaleY,
-      offsetX: offsetX,
-      offsetY: offsetY,
-    );
-  }
-
-  Offset imageToLocal(Offset imagePoint) {
-    return Offset(
-      offsetX + imagePoint.dx * scaleX,
-      offsetY + imagePoint.dy * scaleY,
-    );
-  }
-
-  Offset localToImage(Offset localPoint) {
-    return Offset(
-      (localPoint.dx - offsetX) / (scaleX == 0 ? 1.0 : scaleX),
-      (localPoint.dy - offsetY) / (scaleY == 0 ? 1.0 : scaleY),
-    );
-  }
-}
-
-class _OcrLiveTextPainter extends CustomPainter {
-  const _OcrLiveTextPainter({
-    required this.lines,
-    required this.transform,
-    required this.selectedIndices,
-    required this.hoveredIndex,
-    required this.highlightOpacity,
-    required this.dragMarqueeRect,
-    required this.highlightFillColor,
-    required this.highlightBorderColor,
-    required this.selectedFillColor,
-    required this.selectedBorderColor,
-    required this.hoveredFillColor,
-    required this.marqueeFillColor,
-    required this.marqueeBorderColor,
-  });
-
-  final List<OcrTextLine> lines;
-  final _ImageCoordinateTransform transform;
-  final Set<int> selectedIndices;
-  final int? hoveredIndex;
-  final double highlightOpacity;
-  final Rect? dragMarqueeRect;
-  final Color highlightFillColor;
-  final Color highlightBorderColor;
-  final Color selectedFillColor;
-  final Color selectedBorderColor;
-  final Color hoveredFillColor;
-  final Color marqueeFillColor;
-  final Color marqueeBorderColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (int i = 0; i < lines.length; i++) {
-      final OcrTextLine line = lines[i];
-      if (line.cornerPoints.length < 4) continue;
-
-      final bool isSelected = selectedIndices.contains(i);
-      final bool isHovered = hoveredIndex == i;
-
-      if (!isSelected && !isHovered && highlightOpacity <= 0.01) {
-        continue;
-      }
-
-      final List<Offset> pts = line.cornerPoints
-          .map(transform.imageToLocal)
-          .toList(growable: false);
-
-      final Path polyPath = Path()
-        ..moveTo(pts[0].dx, pts[0].dy)
-        ..lineTo(pts[1].dx, pts[1].dy)
-        ..lineTo(pts[2].dx, pts[2].dy)
-        ..lineTo(pts[3].dx, pts[3].dy)
-        ..close();
-
-      final Color baseFill = isSelected
-          ? selectedFillColor
-          : (isHovered ? hoveredFillColor : highlightFillColor);
-      final Color baseBorder = isSelected
-          ? selectedBorderColor
-          : highlightBorderColor;
-
-      final double effectiveOpacity = (isSelected || isHovered)
-          ? 1.0
-          : highlightOpacity;
-
-      final Paint fillPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = baseFill.withValues(
-          alpha: (baseFill.a * effectiveOpacity).clamp(0.0, 1.0),
-        );
-
-      final Paint borderPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 2.2 : 1.3
-        ..strokeJoin = StrokeJoin.round
-        ..color = baseBorder.withValues(
-          alpha: (baseBorder.a * effectiveOpacity).clamp(0.0, 1.0),
-        );
-
-      canvas.drawPath(polyPath, fillPaint);
-      canvas.drawPath(polyPath, borderPaint);
-    }
-
-    // Draw interactive drag selection marquee rectangle if active
-    if (dragMarqueeRect != null) {
-      final Paint marqueeFill = Paint()
-        ..style = PaintingStyle.fill
-        ..color = marqueeFillColor;
-      final Paint marqueeStroke = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = marqueeBorderColor;
-      canvas.drawRect(dragMarqueeRect!, marqueeFill);
-      canvas.drawRect(dragMarqueeRect!, marqueeStroke);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _OcrLiveTextPainter oldDelegate) {
-    return oldDelegate.lines != lines ||
-        oldDelegate.selectedIndices != selectedIndices ||
-        oldDelegate.hoveredIndex != hoveredIndex ||
-        oldDelegate.highlightOpacity != highlightOpacity ||
-        oldDelegate.dragMarqueeRect != dragMarqueeRect;
   }
 }

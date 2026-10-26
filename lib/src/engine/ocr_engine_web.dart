@@ -7,35 +7,11 @@ import 'dart:typed_data';
 import '../models/ocr_models.dart';
 import '../models/paragraph_clusterer.dart';
 import 'ocr_engine_interface.dart';
+import 'ocr_web_interop_bindings.dart';
 import 'rapid_ocr_worker_script.dart';
 
 /// Factory exported on Web platforms (`dart.library.js_interop`).
 OcrPlatformEngine createPlatformOcrEngine() => OcrEngineWeb();
-
-@JS('Worker')
-extension type _JSWorker._(JSObject _) implements JSObject {
-  external factory _JSWorker(JSString scriptUrl);
-  external void postMessage(JSAny? message, [JSArray<JSObject>? transfer]);
-  external void terminate();
-  external set onmessage(JSFunction? handler);
-  external set onerror(JSFunction? handler);
-}
-
-@JS('Blob')
-extension type _JSBlob._(JSObject _) implements JSObject {
-  external factory _JSBlob(JSArray<JSAny?> blobParts, [JSObject? options]);
-}
-
-@JS('URL.createObjectURL')
-external JSString _createObjectUrl(_JSBlob blob);
-
-@JS('URL.revokeObjectURL')
-external void _revokeObjectUrl(JSString url);
-
-@JS('MessageEvent')
-extension type _JSMessageEvent._(JSObject _) implements JSObject {
-  external JSAny? get data;
-}
 
 /// Web implementation of [OcrPlatformEngine] powered by `dart:js_interop`,
 /// `onnxruntime-web` (WebGPU / WASM SIMD), `OffscreenCanvas`, `CacheStorage` / `IndexedDB`,
@@ -44,7 +20,7 @@ extension type _JSMessageEvent._(JSObject _) implements JSObject {
 /// Strictly avoids deprecated `dart:html` and `dart:js`, making it 100% compatible
 /// with `flutter build web --wasm`.
 class OcrEngineWeb implements OcrPlatformEngine {
-  _JSWorker? _worker;
+  OcrJSWorker? _worker;
   String? _workerBlobUrl;
   bool _initialized = false;
   int _nextRequestId = 1;
@@ -63,17 +39,17 @@ class OcrEngineWeb implements OcrPlatformEngine {
     // Create a self-contained Web Worker from our bundled RapidOCR ONNX Runtime Web script
     final JSObject blobOptions = JSObject()
       ..['type'] = 'application/javascript'.toJS;
-    final _JSBlob workerBlob = _JSBlob(
+    final OcrJSBlob workerBlob = OcrJSBlob(
       <JSAny?>[kRapidOcrWebWorkerScript.toJS].toJS,
       blobOptions,
     );
-    final JSString blobUrl = _createObjectUrl(workerBlob);
+    final JSString blobUrl = createOcrObjectUrl(workerBlob);
     _workerBlobUrl = blobUrl.toDart;
 
-    final _JSWorker worker = _JSWorker(blobUrl);
+    final OcrJSWorker worker = OcrJSWorker(blobUrl);
     _worker = worker;
 
-    worker.onmessage = ((_JSMessageEvent event) {
+    worker.onmessage = ((OcrJSMessageEvent event) {
       final JSAny? rawData = event.data;
       if (rawData == null || !rawData.isA<JSObject>()) return;
       final JSObject obj = rawData as JSObject;
@@ -205,7 +181,6 @@ class OcrEngineWeb implements OcrPlatformEngine {
     final OcrRecognizeOptions effectiveOptions =
         options ?? const OcrRecognizeOptions();
 
-    // Clone into a dedicated Uint8List buffer so its ArrayBuffer can be transferred zero-copy
     final Uint8List transferableCopy = Uint8List.fromList(encodedBytes);
     final JSUint8Array jsBytes = transferableCopy.toJS;
     final JSObject arrayBuffer = jsBytes['buffer'] as JSObject;
@@ -270,7 +245,7 @@ class OcrEngineWeb implements OcrPlatformEngine {
       _worker = null;
     }
     if (_workerBlobUrl != null) {
-      _revokeObjectUrl(_workerBlobUrl!.toJS);
+      revokeOcrObjectUrl(_workerBlobUrl!.toJS);
       _workerBlobUrl = null;
     }
     _initialized = false;

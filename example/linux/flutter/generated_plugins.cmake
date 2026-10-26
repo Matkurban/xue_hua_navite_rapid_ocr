@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  xue_hua_file_operations
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

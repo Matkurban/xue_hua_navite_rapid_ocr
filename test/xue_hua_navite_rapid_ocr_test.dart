@@ -1,7 +1,8 @@
 import 'dart:typed_data';
+import 'dart:ui' show Offset, Rect;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
 void main() {
@@ -75,27 +76,51 @@ void main() {
     );
   });
 
-  group('XueHuaNaviteRapidOcr Engine Lifecycle & Inference Tests', () {
-    test('initializes, runs recognizeBytes & recognizeRawPixels, and disposes cleanly', () async {
+  group('XueHuaNaviteRapidOcr Engine & Multilingual Config Tests', () {
+    test('initializes with OcrModelConfig.forLanguage, runs recognizeBytes & recognizeRawPixels, and disposes cleanly', () async {
       final XueHuaNaviteRapidOcr ocr = XueHuaNaviteRapidOcr();
       expect(ocr.isInitialized, isFalse);
 
-      await ocr.initialize(
-        const OcrModelConfig(
-          language: OcrLanguage.chineseAndEnglish,
-          executionProvider: OcrExecutionProvider.auto,
-          numThreads: 2,
-        ),
+      final OcrModelConfig jaConfig = OcrModelConfig.forLanguage(
+        OcrLanguage.japanese,
+        executionProvider: OcrExecutionProvider.auto,
       );
+      expect(jaConfig.detModelPathOrUrl, contains('Multilingual'));
+      expect(jaConfig.recModelPathOrUrl, contains('japan'));
+
+      await ocr.initialize(jaConfig);
       expect(ocr.isInitialized, isTrue);
 
-      // Minimal PNG signature + IHDR header (960x640)
       final Uint8List fakePng = Uint8List.fromList(<int>[
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-        0x00, 0x00, 0x03, 0xC0, // width = 960
-        0x00, 0x00, 0x02, 0x80, // height = 640
-        0x08, 0x06, 0x00, 0x00, 0x00,
+        0x89,
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+        0x00,
+        0x00,
+        0x00,
+        0x0D,
+        0x49,
+        0x48,
+        0x44,
+        0x52,
+        0x00,
+        0x00,
+        0x03,
+        0xC0,
+        0x00,
+        0x00,
+        0x02,
+        0x80,
+        0x08,
+        0x06,
+        0x00,
+        0x00,
+        0x00,
       ]);
 
       final OcrResult byteResult = await ocr.recognizeBytes(
@@ -122,11 +147,10 @@ void main() {
     });
   });
 
-  group('OcrLiveTextOverlay Widget Tests', () {
+  group('OcrLiveTextOverlay & OcrLiveTextStrings Widget Tests', () {
     testWidgets(
-      'renders rotated quadrilateral highlights and handles tap selection',
+      'renders rotated quadrilateral highlights with custom OcrLiveTextStrings and ValueListenable updates',
       (WidgetTester tester) async {
-        // 1x1 transparent PNG
         final Uint8List onePixelPng = Uint8List.fromList(<int>[
           0x89,
           0x50,
@@ -236,6 +260,7 @@ void main() {
                   image: MemoryImage(onePixelPng),
                   ocrResult: ocrResult,
                   controller: controller,
+                  strings: OcrLiveTextStrings.zhCN(),
                   fit: BoxFit.fill,
                   onSelectionChanged: (String text, List<OcrTextLine> lines) {
                     lastSelected = text;
@@ -249,18 +274,14 @@ void main() {
         await tester.pump();
         expect(controller.showHighlightBoxes, isTrue);
 
-        // Tap inside the text polygon at (100, 50)
         await tester.tapAt(const Offset(100, 50));
         await tester.pump();
 
         expect(controller.selectedIndices, contains(0));
         expect(lastSelected, 'Hello Live Text');
-        expect(
-          find.byKey(const ValueKey<String>('ocr_live_text_copy_btn')),
-          findsOneWidget,
-        );
+        expect(find.text('复制'), findsOneWidget);
+        expect(find.text('全选'), findsOneWidget);
 
-        // Toggle highlight visibility
         await tester.tap(
           find.byKey(const ValueKey<String>('ocr_live_text_toggle_btn')),
         );

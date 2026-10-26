@@ -6,7 +6,7 @@ English | [简体中文](./README_ZH.md)
 [![Platform](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-brightgreen.svg)](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `iOS`, `macOS`, `Windows`, `Linux`, and `Web`) built on the **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX Runtime)** pipeline with an interactive **Live Text Overlay (`OcrLiveTextOverlay`)**.
+A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `iOS`, `macOS`, `Windows`, `Linux`, and `Web`) built on the **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX Runtime)** pipeline with an interactive **Live Text Overlay (`OcrLiveTextOverlay`)** using **`package:material_ui/material_ui.dart`**.
 
 - **Author**: Matkurban (`3496354336@qq.com`)
 - **Repository**: [https://github.com/Matkurban/xue_hua_navite_rapid_ocr](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
@@ -16,6 +16,7 @@ A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `i
 
 1. **True 6-Platform Unified API with Compile-Time Isolation**:
    - Uses Dart conditional exports (`if (dart.library.ffi)` vs `if (dart.library.js_interop)`) so `flutter build web` and `flutter build web --wasm` never fail due to transitive `dart:ffi` or `dart:io` imports.
+   - Built with Flutter's decoupled Material Design library [`package:material_ui/material_ui.dart`](https://pub.dev/packages/material_ui) across all UI components, tests, and examples.
 2. **Native Engine (`Android` / `iOS` / `macOS` / `Windows` / `Linux`)**:
    - Powered by **C++17 (`RapidOcrOnnx`) + `dart:ffi` + dedicated background `Worker Isolate`** with `TransferableTypedData` zero-copy memory transfer.
    - Native **Swift Package Manager (`Package.swift`)** support for iOS & macOS (sharing the same C++17 core) and **CMake (`CMakeLists.txt`)** for Android (16 KB page-size aligned for Android 15+), Windows, and Linux.
@@ -26,10 +27,11 @@ A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `i
    - Automatically caches `.onnx` models and `keys.txt` in browser **`CacheStorage`** (`xue_hua_rapid_ocr_onnx_cache_v1`) so reloads do not re-download model weights.
 4. **Spatial Layout Analysis & Paragraph Clustering (`OcrParagraphClusterer`)**:
    - Pure Dart layout engine shared across Native and Web that sorts recognized text lines (`OcrTextLine`) in natural reading order and groups spatially adjacent lines with matching line heights into paragraph blocks (`OcrTextBlock`), exposing `fullText`, `toMarkdown()`, and `toJson()`.
-5. **Interactive Live Text Widget (`OcrLiveTextOverlay`)**:
-   - Renders rotated 4-vertex quadrilateral highlights directly over the image (`CustomPainter`), supporting single-tap selection, touch/mouse lasso & rectangular multi-line drag selection, automatic desktop/Web `SystemMouseCursors.text` hover cursor, and a customizable floating action bar.
+5. **Interactive Live Text Widget (`OcrLiveTextOverlay`) with Zero `setState` Overhead & Full i18n (`OcrLiveTextStrings`)**:
+   - Driven by granular `ValueNotifier`s, `ValueListenableBuilder`s, and `CustomPainter(repaint: Listenable.merge(...))` so mouse hover, marquee dragging, and selection updates only repaint the affected layer without rebuilding the entire widget tree.
+   - Accepts an `OcrLiveTextStrings` object (`OcrLiveTextStrings()`, `OcrLiveTextStrings.zhCN()`, `OcrLiveTextStrings.jaJP()`, or custom builders) to localize every button, tooltip, selection counter, and SnackBar notification.
 
-## Directory Structure
+## Modular Directory Structure
 
 ```text
 xue_hua_navite_rapid_ocr/
@@ -45,8 +47,7 @@ xue_hua_navite_rapid_ocr/
 │   └── xue_hua_navite_rapid_ocr_c_api.cpp
 ├── ios/
 │   ├── xue_hua_navite_rapid_ocr.podspec
-│   ├── Classes/
-│   │   └── xue_hua_navite_rapid_ocr_c_api.cpp
+│   ├── Classes/xue_hua_navite_rapid_ocr_c_api.cpp
 │   └── xue_hua_navite_rapid_ocr/
 │       ├── Package.swift
 │       └── Sources/xue_hua_navite_rapid_ocr/
@@ -54,34 +55,45 @@ xue_hua_navite_rapid_ocr/
 │           └── xue_hua_navite_rapid_ocr_c_api.cpp
 ├── macos/
 │   ├── xue_hua_navite_rapid_ocr.podspec
-│   ├── Classes/
-│   │   └── xue_hua_navite_rapid_ocr_c_api.cpp
+│   ├── Classes/xue_hua_navite_rapid_ocr_c_api.cpp
 │   └── xue_hua_navite_rapid_ocr/
 │       ├── Package.swift
 │       └── Sources/xue_hua_navite_rapid_ocr/
 │           ├── include/xue_hua_navite_rapid_ocr_c_api.h
 │           └── xue_hua_navite_rapid_ocr_c_api.cpp
-├── android/
-│   └── build.gradle
-├── windows/
-│   └── CMakeLists.txt
-├── linux/
-│   └── CMakeLists.txt
+├── android/build.gradle
+├── windows/CMakeLists.txt
+├── linux/CMakeLists.txt
 ├── lib/
 │   ├── xue_hua_navite_rapid_ocr.dart
 │   ├── xue_hua_navite_rapid_ocr_web.dart
 │   └── src/
+│       ├── xue_hua_navite_rapid_ocr_client.dart
 │       ├── engine/
 │       │   ├── ocr_engine_interface.dart
 │       │   ├── ocr_engine_stub.dart
 │       │   ├── ffi_bindings.dart
+│       │   ├── ocr_ffi_messages.dart
 │       │   ├── ocr_engine_ffi.dart
+│       │   ├── ocr_web_interop_bindings.dart
 │       │   ├── ocr_engine_web.dart
 │       │   └── rapid_ocr_worker_script.dart
 │       ├── models/
 │       │   ├── ocr_models.dart
+│       │   ├── ocr_enums.dart
+│       │   ├── ocr_model_config.dart
+│       │   ├── ocr_recognize_options.dart
+│       │   ├── ocr_text_line.dart
+│       │   ├── ocr_text_block.dart
+│       │   ├── ocr_result.dart
+│       │   ├── ocr_exception.dart
 │       │   └── paragraph_clusterer.dart
 │       └── widgets/
+│           ├── ocr_image_coordinate_transform.dart
+│           ├── ocr_live_text_controller.dart
+│           ├── ocr_live_text_custom_action.dart
+│           ├── ocr_live_text_painter.dart
+│           ├── ocr_live_text_strings.dart
 │           └── ocr_live_text_overlay.dart
 ├── skills/
 │   └── xue-hua-navite-rapid-ocr/
@@ -90,130 +102,194 @@ xue_hua_navite_rapid_ocr/
 │   └── xue_hua_navite_rapid_ocr_test.dart
 └── example/
     └── lib/
-        └── main.dart
+        ├── main.dart
+        ├── pages/ocr_demo_home_page.dart
+        ├── utils/sample_image_generator.dart
+        └── widgets/
+            ├── live_text_preview_tab.dart
+            ├── paragraph_blocks_tab.dart
+            ├── markdown_json_tab.dart
+            └── engine_config_tab.dart
 ```
 
-## Installation & Platform Setup
+## Installation
 
-Add `xue_hua_navite_rapid_ocr` to your `pubspec.yaml`:
+Add `xue_hua_navite_rapid_ocr` and `material_ui` (plus `xue_hua_file_operations: ^1.5.2` if you need cross-platform image picking) to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.8.0
+  xue_hua_file_operations: ^1.5.2
   xue_hua_navite_rapid_ocr: ^1.0.0
 ```
 
-### Bundling PP-OCRv4 / PP-OCRv5 ONNX Models
+## Multilingual OCR Integration Guide (80+ Languages)
 
-Declare your `.onnx` model files and dictionary in your app's `pubspec.yaml`:
+`xue_hua_navite_rapid_ocr` supports 80+ languages by pairing a universal DBNet text detector (`det.onnx`), the 180° orientation classifier (`cls.onnx`), and a language-specific CrnnNet/SVTR recognition model (`rec.onnx`) + character dictionary (`keys.txt`).
+
+### 1. Preset Languages & Recommended ONNX Model Files
+
+| `OcrLanguage` Enum | Supported Scripts / Languages | Recommended Detection Model (`det.onnx`) | Recommended Recognition Model (`rec.onnx`) | Dictionary (`keys.txt`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `OcrLanguage.chineseAndEnglish` | Simplified/Traditional Chinese, English, Numbers | `ch_PP-OCRv4_det_infer.onnx` | `ch_PP-OCRv4_rec_infer.onnx` | `ppocr_keys_v1.txt` |
+| `OcrLanguage.english` | English, Numbers, Symbols | `ch_PP-OCRv4_det_infer.onnx` | `en_PP-OCRv4_rec_infer.onnx` | `en_dict.txt` |
+| `OcrLanguage.japanese` | Japanese (Kanji, Hiragana, Katakana), English | `Multilingual_PP-OCRv3_det_infer.onnx` | `japan_PP-OCRv4_rec_infer.onnx` | `japan_dict.txt` |
+| `OcrLanguage.korean` | Korean (Hangul), English | `Multilingual_PP-OCRv3_det_infer.onnx` | `korean_PP-OCRv4_rec_infer.onnx` | `korean_dict.txt` |
+| `OcrLanguage.latin` | French, German, Spanish, Italian, Portuguese, etc. | `Multilingual_PP-OCRv3_det_infer.onnx` | `latin_PP-OCRv3_rec_infer.onnx` | `latin_dict.txt` |
+| `OcrLanguage.cyrillic` | Russian, Ukrainian, Belarusian, Bulgarian, etc. | `Multilingual_PP-OCRv3_det_infer.onnx` | `cyrillic_PP-OCRv3_rec_infer.onnx` | `cyrillic_dict.txt` |
+| `OcrLanguage.arabic` | Arabic, Persian, Uyghur, Urdu | `Multilingual_PP-OCRv3_det_infer.onnx` | `arabic_PP-OCRv4_rec_infer.onnx` | `arabic_dict.txt` |
+| `OcrLanguage.multilingual` | Any custom PP-OCRv4/v5 language model | Custom `det.onnx` path/URL | Custom `rec.onnx` path/URL | Custom `keys.txt` path/URL |
+
+### 2. Declare Multilingual Model Assets in `pubspec.yaml`
 
 ```yaml
 flutter:
   assets:
-    - assets/models/ch_PP-OCRv4_det_infer.onnx
+    # Shared angle classifier
     - assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+    # Chinese & English (default)
+    - assets/models/ch_PP-OCRv4_det_infer.onnx
     - assets/models/ch_PP-OCRv4_rec_infer.onnx
     - assets/models/ppocr_keys_v1.txt
+    # Multilingual detection + Japanese / Korean / Latin / Cyrillic / Arabic
+    - assets/models/Multilingual_PP-OCRv3_det_infer.onnx
+    - assets/models/japan_PP-OCRv4_rec_infer.onnx
+    - assets/models/japan_dict.txt
+    - assets/models/korean_PP-OCRv4_rec_infer.onnx
+    - assets/models/korean_dict.txt
+    - assets/models/latin_PP-OCRv3_rec_infer.onnx
+    - assets/models/latin_dict.txt
 ```
 
-### Platform Notes
+### 3. Initialize & Dynamically Switch Languages at Runtime
 
-| Platform | Build System | Hardware Acceleration (`OcrExecutionProvider`) | Notes |
-| :--- | :--- | :--- | :--- |
-| **Android** | CMake + NDK (`minSdk 24`) | `nnapi` / `cpu` | Configured with `-Wl,-z,max-page-size=16384` for Android 15+ 16 KB page alignment. |
-| **iOS** | Swift Package Manager (`Package.swift`) & CocoaPods (`iOS 15.0+`) | `coreML` / `cpu` | Shares C++17 source directly via `Package.swift`. |
-| **macOS** | Swift Package Manager (`Package.swift`) & CocoaPods (`macOS 11.0+`) | `coreML` / `cpu` | Shares C++17 source directly via `Package.swift`. |
-| **Windows** | CMake (`Visual Studio 2022 C++17`) | `directML` / `cpu` | Compiles `xue_hua_navite_rapid_ocr.dll`. |
-| **Linux** | CMake (`clang++` / `g++` C++17) | `cpu` | Compiles `libxue_hua_navite_rapid_ocr.so`. |
-| **Web** | `dart:js_interop` + Web Worker | `webGpu` / `wasm` | Compatible with `flutter build web --wasm`. Uses `CacheStorage` for model caching. |
-
-## Quick Start & Full Usage
-
-### 1. Initialize the Engine
+Use `OcrModelConfig.forLanguage(...)` to automatically bind the default asset paths for any `OcrLanguage`, or override `detModelPathOrUrl`, `recModelPathOrUrl`, and `keysPathOrUrl` with custom paths or CDN URLs:
 
 ```dart
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
 final ocr = XueHuaNaviteRapidOcr.instance;
 
+// Initialize with Japanese PP-OCRv4 model
 await ocr.initialize(
-  const OcrModelConfig(
-    language: OcrLanguage.chineseAndEnglish, // or OcrLanguage.multilingual
+  OcrModelConfig.forLanguage(
+    OcrLanguage.japanese,
     executionProvider: OcrExecutionProvider.auto,
-    detModelPathOrUrl: 'assets/models/ch_PP-OCRv4_det_infer.onnx',
-    clsModelPathOrUrl: 'assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx',
-    recModelPathOrUrl: 'assets/models/ch_PP-OCRv4_rec_infer.onnx',
-    keysPathOrUrl: 'assets/models/ppocr_keys_v1.txt',
     numThreads: 4,
     enableHardwareAcceleration: true,
     enableWebModelCache: true,
   ),
 );
-```
 
-### 2. Three Ways to Recognize Images
-
-```dart
-// A. From local file path (Native) or Blob / Data / HTTP / Asset URL (Web)
-final OcrResult fileResult = await ocr.recognizeFile(
-  '/path/to/invoice.jpg',
-  options: const OcrRecognizeOptions(
-    maxSideLen: 960,
-    boxThresh: 0.5,
-    boxScoreThresh: 0.6,
-    unclipRatio: 1.6,
-    doAngle: true,
-    mostAngle: true,
-    minConfidence: 0.3,
-  ),
+// Switch to Korean or Latin on demand (safely re-initializes the Worker Isolate / Web Worker)
+await ocr.initialize(
+  OcrModelConfig.forLanguage(OcrLanguage.korean),
 );
-
-// B. From in-memory encoded bytes (PNG / JPEG / WebP / BMP across all 6 platforms)
-final OcrResult bytesResult = await ocr.recognizeBytes(encodedPngOrJpegBytes);
-
-// C. From raw camera / ui.Image pixel buffers (RGBA8888 / BGRA8888 / NV21)
-final OcrResult pixelResult = await ocr.recognizeRawPixels(
-  pixels: rawRgbaBytes,
-  width: 1920,
-  height: 1080,
-  format: OcrPixelFormat.rgba8888,
-  rowStride: 1920 * 4,
-);
-
-// Inspect paragraphs, plain text, Markdown, and JSON
-print(bytesResult.fullText);
-print(bytesResult.toMarkdown());
-print(bytesResult.toJson());
 ```
 
-### 3. Interactive Live Text Overlay (`OcrLiveTextOverlay`)
+## Full Usage Example with `xue_hua_file_operations` & `OcrLiveTextOverlay`
 
 ```dart
-OcrLiveTextOverlay(
-  image: MemoryImage(encodedPngBytes),
-  ocrResult: bytesResult,
-  fit: BoxFit.contain,
-  onSelectionChanged: (String selectedText, List<OcrTextLine> selectedLines) {
-    debugPrint('Selected: $selectedText');
-  },
-  onTextCopied: (String copiedText) {
-    debugPrint('Copied to clipboard: $copiedText');
-  },
-  customActions: [
-    OcrLiveTextCustomAction(
-      label: 'Share',
-      icon: Icons.share_rounded,
-      onPressed: (selectedText, selectedLines) {
-        // Trigger share or custom workflow
-      },
-    ),
-  ],
-)
-```
+import 'package:material_ui/material_ui.dart';
+import 'package:xue_hua_file_operations/xue_hua_file_operations.dart';
+import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
-### 4. Dispose Engine When Done
+class DocumentScannerView extends StatefulWidget {
+  const DocumentScannerView({super.key});
 
-```dart
-await ocr.dispose();
+  @override
+  State<DocumentScannerView> createState() => _DocumentScannerViewState();
+}
+
+class _DocumentScannerViewState extends State<DocumentScannerView> {
+  final XueHuaNaviteRapidOcr _ocr = XueHuaNaviteRapidOcr();
+  final XueHuaFileOperations _fileOps = XueHuaFileOperations.instance;
+  final OcrLiveTextController _liveTextController = OcrLiveTextController();
+
+  PlatformFile? _pickedFile;
+  OcrResult? _ocrResult;
+
+  @override
+  void initState() {
+    super.initState();
+    _ocr.initialize(
+      OcrModelConfig.forLanguage(OcrLanguage.chineseAndEnglish),
+    );
+  }
+
+  Future<void> _pickImageAndRunOcr() async {
+    // 1. Pick an image across Android, iOS, macOS, Windows, Linux, and Web
+    final PlatformFile? file = await _fileOps.pickFile(
+      type: FileType.image,
+      withData: true,
+    );
+    if (file == null || file.bytes == null) return;
+
+    // 2. Run zero-copy OCR recognition
+    final OcrResult result = await _ocr.recognizeBytes(
+      file.bytes!,
+      options: const OcrRecognizeOptions(
+        maxSideLen: 960,
+        boxThresh: 0.5,
+        boxScoreThresh: 0.6,
+        unclipRatio: 1.6,
+        doAngle: true,
+        minConfidence: 0.3,
+      ),
+    );
+
+    setState(() {
+      _pickedFile = file;
+      _ocrResult = result;
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveTextController.dispose();
+    _ocr.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('RapidOCR + File Operations'),
+        actions: <Widget>[
+          FilledButton.icon(
+            onPressed: _pickImageAndRunOcr,
+            icon: const Icon(Icons.add_photo_alternate_rounded),
+            label: const Text('Pick Image & OCR'),
+          ),
+        ],
+      ),
+      body: _pickedFile?.bytes != null && _ocrResult != null
+          ? OcrLiveTextOverlay(
+              image: MemoryImage(_pickedFile!.bytes!),
+              ocrResult: _ocrResult!,
+              controller: _liveTextController,
+              // Pass localized strings via OcrLiveTextStrings
+              strings: OcrLiveTextStrings(
+                copyButtonLabel: 'Copy',
+                selectAllButtonLabel: 'Select All',
+                clearSelectionTooltip: 'Clear selection',
+                hideHighlightsTooltip: 'Hide Live Text Highlights',
+                showHighlightsTooltip: 'Show Live Text Highlights',
+                selectedCountBuilder: (int count) => '$count lines selected',
+                copiedSnackBarMessageBuilder: (int count) =>
+                    'Copied $count line(s) to clipboard',
+              ),
+              onSelectionChanged: (String text, List<OcrTextLine> lines) {
+                debugPrint('Selected: $text');
+              },
+            )
+          : const Center(child: Text('Tap "Pick Image & OCR" to begin.')),
+    );
+  }
+}
 ```
 
 ## AI Coding Agent Skills (`package:skills`)
@@ -226,9 +302,9 @@ dart run skills@ get
 
 ## Important Notes & Best Practices
 
-1. **Zero UI Jank**: All Native C++ decoding/inference runs inside a persistent background `Worker Isolate`, and all Web decoding/inference runs inside a dedicated `Web Worker`.
-2. **Automatic EXIF Orientation**: Smartphone camera photos frequently contain EXIF Orientation metadata (`1..8`). Both the Native C++ decoder and Web Worker normalize orientation automatically before detection, returning `result.imageWidth` and `result.imageHeight` in upright display coordinates.
-3. **Always Call `dispose()`**: When shutting down a dedicated OCR controller, call `await ocr.dispose()` to free native ONNX sessions or terminate the browser Web Worker.
+1. **Always Use `package:material_ui/material_ui.dart`**: This plugin and its example use Flutter's standalone `material_ui` package rather than legacy `package:flutter/material.dart`.
+2. **Fine-Grained Repaints in `OcrLiveTextOverlay`**: `OcrLiveTextOverlay` uses `ValueNotifier` and `Listenable.merge` inside `OcrLiveTextPainter` instead of `setState`. You can also listen to `controller.selectedIndicesListenable` and `controller.showHighlightBoxesListenable` directly.
+3. **Automatic EXIF Orientation**: Smartphone camera photos frequently contain EXIF Orientation metadata (`1..8`). Both the Native C++ decoder and Web Worker normalize orientation automatically before detection, returning `result.imageWidth` and `result.imageHeight` in upright display coordinates.
 
 ## License
 
