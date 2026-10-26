@@ -1,130 +1,78 @@
+library xue_hua_navite_rapid_ocr;
 
-import 'dart:async';
-import 'dart:ffi';
-import 'dart:io';
-import 'dart:isolate';
+import 'dart:typed_data';
 
-import 'xue_hua_navite_rapid_ocr_bindings_generated.dart';
+import 'src/engine/ocr_engine_interface.dart';
+import 'src/engine/ocr_engine_stub.dart'
+    if (dart.library.ffi) 'src/engine/ocr_engine_ffi.dart'
+    if (dart.library.js_interop) 'src/engine/ocr_engine_web.dart';
+import 'src/models/ocr_models.dart';
 
-/// A very short-lived native function.
-///
-/// For very short-lived functions, it is fine to call them on the main isolate.
-/// They will block the Dart execution while running the native function, so
-/// only do this for native functions which are guaranteed to be short-lived.
-int sum(int a, int b) => _bindings.sum(a, b);
+export 'src/engine/ocr_engine_interface.dart' show OcrPlatformEngine;
+export 'src/models/ocr_models.dart';
+export 'src/models/paragraph_clusterer.dart' show OcrParagraphClusterer;
+export 'src/widgets/ocr_live_text_overlay.dart';
 
-/// A longer lived native function, which occupies the thread calling it.
+/// Unified 6-platform offline RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX) engine for Flutter.
 ///
-/// Do not call these kind of native functions in the main isolate. They will
-/// block Dart execution. This will cause dropped frames in Flutter applications.
-/// Instead, call these native functions on a separate isolate.
-///
-/// Modify this to suit your own use case. Example use cases:
-///
-/// 1. Reuse a single isolate for various different kinds of requests.
-/// 2. Use multiple helper isolates for parallel execution.
-Future<int> sumAsync(int a, int b) async {
-  final SendPort helperIsolateSendPort = await _helperIsolateSendPort;
-  final int requestId = _nextSumRequestId++;
-  final _SumRequest request = _SumRequest(requestId, a, b);
-  final Completer<int> completer = Completer<int>();
-  _sumRequests[requestId] = completer;
-  helperIsolateSendPort.send(request);
-  return completer.future;
+/// Uses compile-time conditional exports (`dart.library.ffi` vs `dart.library.js_interop`)
+/// to automatically dispatch between:
+/// - **Native (Android / iOS / macOS / Windows / Linux)**: `RapidOcrOnnx C++17` + `dart:ffi`
+///   + background `Worker Isolate` with zero-copy `TransferableTypedData`.
+/// - **Web (Browser WASM / WebGPU)**: `dart:js_interop` + `onnxruntime-web` (WebGPU / WASM SIMD)
+///   + `OffscreenCanvas` + `CacheStorage` / `IndexedDB` inside a dedicated `Web Worker`.
+class XueHuaNaviteRapidOcr {
+  /// Creates a new [XueHuaNaviteRapidOcr] instance backed by the platform's native FFI Isolate
+  /// or Web Worker engine, or a custom [engine] for testing.
+  XueHuaNaviteRapidOcr({OcrPlatformEngine? engine})
+    : _engine = engine ?? createPlatformOcrEngine();
+
+  /// Shared singleton convenience instance.
+  static final XueHuaNaviteRapidOcr instance = XueHuaNaviteRapidOcr();
+
+  final OcrPlatformEngine _engine;
+
+  /// Returns `true` if [initialize] has completed and the engine is ready for inference.
+  bool get isInitialized => _engine.isInitialized;
+
+  /// Initializes the OCR engine (automatically launching the Native FFI Worker Isolate
+  /// or Web Worker session for the current platform).
+  Future<void> initialize(OcrModelConfig config) => _engine.initialize(config);
+
+  /// 1. Recognizes text from a local file path (Native) or Blob / Data / HTTP / Asset URL (Web).
+  Future<OcrResult> recognizeFile(
+    String filePathOrUrl, {
+    OcrRecognizeOptions? options,
+  }) => _engine.recognizeFile(filePathOrUrl, options: options);
+
+  /// 2. Recognizes text from in-memory encoded image bytes (PNG, JPEG, WebP, BMP).
+  ///
+  /// Works identically across all 6 platforms for clipboard screenshots, file picker bytes,
+  /// and cached network image [Uint8List] buffers.
+  Future<OcrResult> recognizeBytes(
+    Uint8List encodedBytes, {
+    OcrRecognizeOptions? options,
+  }) => _engine.recognizeBytes(encodedBytes, options: options);
+
+  /// 3. Recognizes text from raw uncompressed pixel buffers (`RGBA8888`, `BGRA8888`, `NV21`).
+  ///
+  /// Ideal for live camera preview streams or `ui.Image.toByteData(format: ui.ImageByteFormat.rawRgba)`.
+  Future<OcrResult> recognizeRawPixels({
+    required Uint8List pixels,
+    required int width,
+    required int height,
+    required OcrPixelFormat format,
+    int? rowStride,
+    OcrRecognizeOptions? options,
+  }) => _engine.recognizeRawPixels(
+    pixels: pixels,
+    width: width,
+    height: height,
+    format: format,
+    rowStride: rowStride,
+    options: options,
+  );
+
+  /// Releases the underlying C++ engine / Worker Isolate or terminates the Web Worker session.
+  Future<void> dispose() => _engine.dispose();
 }
-
-const String _libName = 'xue_hua_navite_rapid_ocr';
-
-/// The dynamic library in which the symbols for [XueHuaNaviteRapidOcrBindings] can be found.
-final DynamicLibrary _dylib = () {
-  if (Platform.isMacOS || Platform.isIOS) {
-    return DynamicLibrary.open('$_libName.framework/$_libName');
-  }
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('lib$_libName.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('$_libName.dll');
-  }
-  throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
-}();
-
-/// The bindings to the native functions in [_dylib].
-final XueHuaNaviteRapidOcrBindings _bindings = XueHuaNaviteRapidOcrBindings(_dylib);
-
-/// A request to compute `sum`.
-///
-/// Typically sent from one isolate to another.
-class _SumRequest {
-  final int id;
-  final int a;
-  final int b;
-
-  const _SumRequest(this.id, this.a, this.b);
-}
-
-/// A response with the result of `sum`.
-///
-/// Typically sent from one isolate to another.
-class _SumResponse {
-  final int id;
-  final int result;
-
-  const _SumResponse(this.id, this.result);
-}
-
-/// Counter to identify [_SumRequest]s and [_SumResponse]s.
-int _nextSumRequestId = 0;
-
-/// Mapping from [_SumRequest] `id`s to the completers corresponding to the correct future of the pending request.
-final Map<int, Completer<int>> _sumRequests = <int, Completer<int>>{};
-
-/// The SendPort belonging to the helper isolate.
-Future<SendPort> _helperIsolateSendPort = () async {
-  // The helper isolate is going to send us back a SendPort, which we want to
-  // wait for.
-  final Completer<SendPort> completer = Completer<SendPort>();
-
-  // Receive port on the main isolate to receive messages from the helper.
-  // We receive two types of messages:
-  // 1. A port to send messages on.
-  // 2. Responses to requests we sent.
-  final ReceivePort receivePort = ReceivePort()
-    ..listen((dynamic data) {
-      if (data is SendPort) {
-        // The helper isolate sent us the port on which we can sent it requests.
-        completer.complete(data);
-        return;
-      }
-      if (data is _SumResponse) {
-        // The helper isolate sent us a response to a request we sent.
-        final Completer<int> completer = _sumRequests[data.id]!;
-        _sumRequests.remove(data.id);
-        completer.complete(data.result);
-        return;
-      }
-      throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
-    });
-
-  // Start the helper isolate.
-  await Isolate.spawn((SendPort sendPort) async {
-    final ReceivePort helperReceivePort = ReceivePort()
-      ..listen((dynamic data) {
-        // On the helper isolate listen to requests and respond to them.
-        if (data is _SumRequest) {
-          final int result = _bindings.sum_long_running(data.a, data.b);
-          final _SumResponse response = _SumResponse(data.id, result);
-          sendPort.send(response);
-          return;
-        }
-        throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
-      });
-
-    // Send the port to the main isolate on which we can receive requests.
-    sendPort.send(helperReceivePort.sendPort);
-  }, receivePort.sendPort);
-
-  // Wait until the helper isolate has sent us back the SendPort on which we
-  // can start sending requests.
-  return completer.future;
-}();

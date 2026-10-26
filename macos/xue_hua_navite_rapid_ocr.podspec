@@ -1,34 +1,23 @@
-#
-# To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
-# Run `pod lib lint xue_hua_navite_rapid_ocr.podspec` to validate before publishing.
-#
 Pod::Spec.new do |s|
   s.name             = 'xue_hua_navite_rapid_ocr'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter project.'
+  s.version          = '1.0.0'
+  s.summary          = 'Full-featured 6-platform offline RapidOCR ONNX plugin for Flutter.'
   s.description      = <<-DESC
-A new Flutter project.
+Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web offline RapidOCR (PP-OCRv4/PP-OCRv5 ONNX) plugin for Flutter!
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/Matkurban/xue_hua_navite_rapid_ocr'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Matkurban' => '3496354336@qq.com' }
 
-  # This will ensure the source files in Classes/ are included in the native
-  # builds of apps using this FFI plugin. Podspec does not support relative
-  # paths, so Classes contains a forwarder C file that relatively imports
-  # `../src/*` so that the C sources can be shared among all target platforms.
   s.source           = { :path => '.' }
-  s.source_files = 'xue_hua_navite_rapid_ocr/Sources/xue_hua_navite_rapid_ocr/**/*'
-
-  # If your plugin requires a privacy manifest, for example if it collects user
-  # data, update the PrivacyInfo.xcprivacy file to describe your plugin's
-  # privacy impact, and then uncomment this line. For more information,
-  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
-  # s.resource_bundles = {'xue_hua_navite_rapid_ocr_privacy' => ['xue_hua_navite_rapid_ocr/Sources/xue_hua_navite_rapid_ocr/PrivacyInfo.xcprivacy']}
-
+  s.source_files     = 'Classes/**/*'
   s.dependency 'FlutterMacOS'
+  s.platform = :osx, '11.0'
+  s.libraries = 'c++'
 
-  s.platform = :osx, '10.11'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
-  s.swift_version = '5.0'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17'
+  }
+  s.swift_version = '5.9'
 end
