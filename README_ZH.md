@@ -6,7 +6,7 @@
 [![Platform](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-brightgreen.svg)](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**`xue_hua_navite_rapid_ocr`** 是一款生产环境级别的 **Flutter 六端全平台离线 OCR 插件**（支持 `Android`、`iOS`、`macOS`、`Windows`、`Linux` 与 `Web`），底层基于 **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX 模型流水线)**，全面采用 **`package:material_ui/material_ui.dart`** 构建，内置支持国际化定制与局部精准重绘的实况文本交互组件 **`OcrLiveTextOverlay`**。
+**`xue_hua_navite_rapid_ocr`** 是一款生产环境级别的 **Flutter 六端全平台离线 OCR 插件**（支持 `Android`、`iOS`、`macOS`、`Windows`、`Linux` 与 `Web`），底层基于 **RapidOCR **v3.10.0** (PP-OCRv4 / PP-OCRv5 ONNX 模型流水线)**，全面采用 **`package:material_ui/material_ui.dart`** 构建，内置支持国际化定制与局部精准重绘的实况文本交互组件 **`OcrLiveTextOverlay`**。
 
 - **作者 (Author)**：Matkurban (`3496354336@qq.com`)
 - **仓库地址 (Repository)**：[https://github.com/Matkurban/xue_hua_navite_rapid_ocr](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
@@ -44,19 +44,21 @@ dependencies:
 
 ## 多语言（80+ 语种）集成完整指南 (`OcrLanguage` & `OcrModelConfig`)
 
+> 模型文件名与下载地址对齐 **RapidOCR v3.10.0**（`ModelScope resolve/v3.10.0`，见 `scripts/download_models.sh` 与 [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)）。
+
 `xue_hua_navite_rapid_ocr` 支持通过切换 PP-OCRv4 / PP-OCRv5 的识别模型（`rec.onnx`）与对应字符字典（`keys.txt`）实现 80+ 语言离线识别。
 
 ### 1. 多语言枚举与推荐模型对照表
 
 | `OcrLanguage` 枚举值 | 支持语言范围 | 推荐检测模型 (`det.onnx`) | 推荐识别模型 (`rec.onnx`) | 推荐字典文件 (`keys.txt`) |
 | :--- | :--- | :--- | :--- | :--- |
-| `OcrLanguage.chineseAndEnglish` | 简体中文、繁体中文、英文、数字（默认） | `ch_PP-OCRv4_det_infer.onnx` | `ch_PP-OCRv4_rec_infer.onnx` | `ppocr_keys_v1.txt` |
-| `OcrLanguage.english` | 纯英文、数字、符号高速识别 | `ch_PP-OCRv4_det_infer.onnx` | `en_PP-OCRv4_rec_infer.onnx` | `en_dict.txt` |
-| `OcrLanguage.japanese` | 日语（汉字、平假名、片假名）、英文 | `Multilingual_PP-OCRv3_det_infer.onnx` | `japan_PP-OCRv4_rec_infer.onnx` | `japan_dict.txt` |
-| `OcrLanguage.korean` | 韩语（谚文）、英文 | `Multilingual_PP-OCRv3_det_infer.onnx` | `korean_PP-OCRv4_rec_infer.onnx` | `korean_dict.txt` |
-| `OcrLanguage.latin` | 法语、德语、西班牙语、意大利语、葡萄牙语等拉丁语系 | `Multilingual_PP-OCRv3_det_infer.onnx` | `latin_PP-OCRv3_rec_infer.onnx` | `latin_dict.txt` |
-| `OcrLanguage.cyrillic` | 俄语、乌克兰语、白俄罗斯语、保加利亚语等西里尔字母 | `Multilingual_PP-OCRv3_det_infer.onnx` | `cyrillic_PP-OCRv3_rec_infer.onnx` | `cyrillic_dict.txt` |
-| `OcrLanguage.arabic` | 阿拉伯语、波斯语、维吾尔语、乌尔都语 | `Multilingual_PP-OCRv3_det_infer.onnx` | `arabic_PP-OCRv4_rec_infer.onnx` | `arabic_dict.txt` |
+| `OcrLanguage.chineseAndEnglish` | 简体中文、繁体中文、英文、数字（默认） | `ch_PP-OCRv4_det_mobile.onnx` | `ch_PP-OCRv4_rec_mobile.onnx` | `ppocr_keys_v1.txt` |
+| `OcrLanguage.english` | 纯英文、数字、符号高速识别 | `ch_PP-OCRv4_det_mobile.onnx` | `en_PP-OCRv4_rec_mobile.onnx` | `en_dict.txt` |
+| `OcrLanguage.japanese` | 日语（汉字、平假名、片假名）、英文 | `multi_PP-OCRv3_det_mobile.onnx` | `japan_PP-OCRv4_rec_mobile.onnx` | `japan_dict.txt` |
+| `OcrLanguage.korean` | 韩语（谚文）、英文 | `multi_PP-OCRv3_det_mobile.onnx` | `korean_PP-OCRv4_rec_mobile.onnx` | `korean_dict.txt` |
+| `OcrLanguage.latin` | 法语、德语、西班牙语、意大利语、葡萄牙语等拉丁语系 | `multi_PP-OCRv3_det_mobile.onnx` | `latin_PP-OCRv3_rec_mobile.onnx` | `latin_dict.txt` |
+| `OcrLanguage.cyrillic` | 俄语、乌克兰语、白俄罗斯语、保加利亚语等西里尔字母 | `multi_PP-OCRv3_det_mobile.onnx` | `cyrillic_PP-OCRv3_rec_mobile.onnx` | `cyrillic_dict.txt` |
+| `OcrLanguage.arabic` | 阿拉伯语、波斯语、维吾尔语、乌尔都语 | `multi_PP-OCRv3_det_mobile.onnx` | `arabic_PP-OCRv4_rec_mobile.onnx` | `arabic_dict.txt` |
 | `OcrLanguage.multilingual` | 自定义 80+ 语种模型 | 自定义 `det.onnx` 路径或 URL | 自定义 `rec.onnx` 路径或 URL | 自定义 `keys.txt` 路径或 URL |
 
 ### 2. 在 `pubspec.yaml` 中声明多语言模型资源
@@ -64,19 +66,19 @@ dependencies:
 ```yaml
 flutter:
   assets:
-    # 通用 180° 方向分类器
-    - assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+    # 通用 180° 方向分类器（RapidOCR v3.10.0）
+    - assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx
     # 默认中英混排模型
-    - assets/models/ch_PP-OCRv4_det_infer.onnx
-    - assets/models/ch_PP-OCRv4_rec_infer.onnx
+    - assets/models/ch_PP-OCRv4_det_mobile.onnx
+    - assets/models/ch_PP-OCRv4_rec_mobile.onnx
     - assets/models/ppocr_keys_v1.txt
     # 多语言检测模型 + 日语 / 韩语 / 拉丁语 / 俄语 / 阿拉伯语识别模型与字典
-    - assets/models/Multilingual_PP-OCRv3_det_infer.onnx
-    - assets/models/japan_PP-OCRv4_rec_infer.onnx
+    - assets/models/multi_PP-OCRv3_det_mobile.onnx
+    - assets/models/japan_PP-OCRv4_rec_mobile.onnx
     - assets/models/japan_dict.txt
-    - assets/models/korean_PP-OCRv4_rec_infer.onnx
+    - assets/models/korean_PP-OCRv4_rec_mobile.onnx
     - assets/models/korean_dict.txt
-    - assets/models/latin_PP-OCRv3_rec_infer.onnx
+    - assets/models/latin_PP-OCRv3_rec_mobile.onnx
     - assets/models/latin_dict.txt
 ```
 
@@ -109,9 +111,9 @@ await ocr.initialize(
 await ocr.initialize(
   const OcrModelConfig(
     language: OcrLanguage.multilingual,
-    detModelPathOrUrl: 'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    clsModelPathOrUrl: 'assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx',
-    recModelPathOrUrl: 'assets/models/arabic_PP-OCRv4_rec_infer.onnx',
+    detModelPathOrUrl: 'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    clsModelPathOrUrl: 'assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx',
+    recModelPathOrUrl: 'assets/models/arabic_PP-OCRv4_rec_mobile.onnx',
     keysPathOrUrl: 'assets/models/arabic_dict.txt',
   ),
 );

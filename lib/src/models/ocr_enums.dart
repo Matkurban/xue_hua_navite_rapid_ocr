@@ -1,4 +1,4 @@
-/// Supported OCR recognition language presets for PP-OCRv4 / PP-OCRv5 ONNX pipelines.
+/// Supported OCR recognition language presets for RapidOCR v3.10.0 (PP-OCRv4 / PP-OCRv5 ONNX).
 ///
 /// Covers 80+ languages via PaddleOCR / RapidOCR ONNX recognition models and character dictionaries.
 enum OcrLanguage {
@@ -6,8 +6,8 @@ enum OcrLanguage {
   chineseAndEnglish(
     'ch_PP-OCRv4',
     'Chinese & English (ch_PP-OCRv4/v5)',
-    'assets/models/ch_PP-OCRv4_det_infer.onnx',
-    'assets/models/ch_PP-OCRv4_rec_infer.onnx',
+    'assets/models/ch_PP-OCRv4_det_mobile.onnx',
+    'assets/models/ch_PP-OCRv4_rec_mobile.onnx',
     'assets/models/ppocr_keys_v1.txt',
   ),
 
@@ -15,8 +15,8 @@ enum OcrLanguage {
   english(
     'en_PP-OCRv4',
     'English (en_PP-OCRv4)',
-    'assets/models/ch_PP-OCRv4_det_infer.onnx',
-    'assets/models/en_PP-OCRv4_rec_infer.onnx',
+    'assets/models/ch_PP-OCRv4_det_mobile.onnx',
+    'assets/models/en_PP-OCRv4_rec_mobile.onnx',
     'assets/models/en_dict.txt',
   ),
 
@@ -24,8 +24,8 @@ enum OcrLanguage {
   japanese(
     'japan_PP-OCRv4',
     'Japanese / 日本語 (japan_PP-OCRv4)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/japan_PP-OCRv4_rec_infer.onnx',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/japan_PP-OCRv4_rec_mobile.onnx',
     'assets/models/japan_dict.txt',
   ),
 
@@ -33,8 +33,8 @@ enum OcrLanguage {
   korean(
     'korean_PP-OCRv4',
     'Korean / 한국어 (korean_PP-OCRv4)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/korean_PP-OCRv4_rec_infer.onnx',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/korean_PP-OCRv4_rec_mobile.onnx',
     'assets/models/korean_dict.txt',
   ),
 
@@ -42,8 +42,8 @@ enum OcrLanguage {
   latin(
     'latin_PP-OCRv3',
     'Latin (French / German / Spanish / Italian / Portuguese)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/latin_PP-OCRv3_rec_infer.onnx',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/latin_PP-OCRv3_rec_mobile.onnx',
     'assets/models/latin_dict.txt',
   ),
 
@@ -51,8 +51,8 @@ enum OcrLanguage {
   cyrillic(
     'cyrillic_PP-OCRv3',
     'Cyrillic / Русский (Russian / Ukrainian / Bulgarian)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/cyrillic_PP-OCRv3_rec_infer.onnx',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/cyrillic_PP-OCRv3_rec_mobile.onnx',
     'assets/models/cyrillic_dict.txt',
   ),
 
@@ -60,8 +60,8 @@ enum OcrLanguage {
   arabic(
     'arabic_PP-OCRv4',
     'Arabic / العربية (arabic_PP-OCRv4)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/arabic_PP-OCRv4_rec_infer.onnx',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/arabic_PP-OCRv4_rec_mobile.onnx',
     'assets/models/arabic_dict.txt',
   ),
 
@@ -69,9 +69,9 @@ enum OcrLanguage {
   multilingual(
     'multilingual_PP-OCRv4',
     'Multilingual (80+ Languages Custom Model)',
-    'assets/models/Multilingual_PP-OCRv3_det_infer.onnx',
-    'assets/models/multilingual_PP-OCRv4_rec_infer.onnx',
-    'assets/models/multilingual_keys.txt',
+    'assets/models/multi_PP-OCRv3_det_mobile.onnx',
+    'assets/models/ch_PP-OCRv4_rec_mobile.onnx',
+    'assets/models/ppocr_keys_v1.txt',
   );
 
   const OcrLanguage(

@@ -84,7 +84,7 @@ void main() {
         OcrLanguage.japanese,
         executionProvider: OcrExecutionProvider.auto,
       );
-      expect(jaConfig.detModelPathOrUrl, contains('Multilingual'));
+      expect(jaConfig.detModelPathOrUrl, contains('multi_PP-OCRv3_det_mobile'));
       expect(jaConfig.recModelPathOrUrl, contains('japan'));
 
       try {

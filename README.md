@@ -6,7 +6,7 @@ English | [简体中文](./README_ZH.md)
 [![Platform](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-brightgreen.svg)](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `iOS`, `macOS`, `Windows`, `Linux`, and `Web`) built on the **RapidOCR (PP-OCRv4 / PP-OCRv5 ONNX Runtime)** pipeline with an interactive **Live Text Overlay (`OcrLiveTextOverlay`)** using **`package:material_ui/material_ui.dart`**.
+A production-grade, **6-platform offline OCR plugin for Flutter** (`Android`, `iOS`, `macOS`, `Windows`, `Linux`, and `Web`) built on the **RapidOCR **v3.10.0** (PP-OCRv4 / PP-OCRv5 ONNX Runtime)** pipeline with an interactive **Live Text Overlay (`OcrLiveTextOverlay`)** using **`package:material_ui/material_ui.dart`**.
 
 - **Author**: Matkurban (`3496354336@qq.com`)
 - **Repository**: [https://github.com/Matkurban/xue_hua_navite_rapid_ocr](https://github.com/Matkurban/xue_hua_navite_rapid_ocr)
@@ -127,19 +127,21 @@ dependencies:
 
 ## Multilingual OCR Integration Guide (80+ Languages)
 
+> Model filenames and download URLs are aligned with **RapidOCR v3.10.0** (`ModelScope resolve/v3.10.0`, see `scripts/download_models.sh` and [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)).
+
 `xue_hua_navite_rapid_ocr` supports 80+ languages by pairing a universal DBNet text detector (`det.onnx`), the 180° orientation classifier (`cls.onnx`), and a language-specific CrnnNet/SVTR recognition model (`rec.onnx`) + character dictionary (`keys.txt`).
 
 ### 1. Preset Languages & Recommended ONNX Model Files
 
 | `OcrLanguage` Enum | Supported Scripts / Languages | Recommended Detection Model (`det.onnx`) | Recommended Recognition Model (`rec.onnx`) | Dictionary (`keys.txt`) |
 | :--- | :--- | :--- | :--- | :--- |
-| `OcrLanguage.chineseAndEnglish` | Simplified/Traditional Chinese, English, Numbers | `ch_PP-OCRv4_det_infer.onnx` | `ch_PP-OCRv4_rec_infer.onnx` | `ppocr_keys_v1.txt` |
-| `OcrLanguage.english` | English, Numbers, Symbols | `ch_PP-OCRv4_det_infer.onnx` | `en_PP-OCRv4_rec_infer.onnx` | `en_dict.txt` |
-| `OcrLanguage.japanese` | Japanese (Kanji, Hiragana, Katakana), English | `Multilingual_PP-OCRv3_det_infer.onnx` | `japan_PP-OCRv4_rec_infer.onnx` | `japan_dict.txt` |
-| `OcrLanguage.korean` | Korean (Hangul), English | `Multilingual_PP-OCRv3_det_infer.onnx` | `korean_PP-OCRv4_rec_infer.onnx` | `korean_dict.txt` |
-| `OcrLanguage.latin` | French, German, Spanish, Italian, Portuguese, etc. | `Multilingual_PP-OCRv3_det_infer.onnx` | `latin_PP-OCRv3_rec_infer.onnx` | `latin_dict.txt` |
-| `OcrLanguage.cyrillic` | Russian, Ukrainian, Belarusian, Bulgarian, etc. | `Multilingual_PP-OCRv3_det_infer.onnx` | `cyrillic_PP-OCRv3_rec_infer.onnx` | `cyrillic_dict.txt` |
-| `OcrLanguage.arabic` | Arabic, Persian, Uyghur, Urdu | `Multilingual_PP-OCRv3_det_infer.onnx` | `arabic_PP-OCRv4_rec_infer.onnx` | `arabic_dict.txt` |
+| `OcrLanguage.chineseAndEnglish` | Simplified/Traditional Chinese, English, Numbers | `ch_PP-OCRv4_det_mobile.onnx` | `ch_PP-OCRv4_rec_mobile.onnx` | `ppocr_keys_v1.txt` |
+| `OcrLanguage.english` | English, Numbers, Symbols | `ch_PP-OCRv4_det_mobile.onnx` | `en_PP-OCRv4_rec_mobile.onnx` | `en_dict.txt` |
+| `OcrLanguage.japanese` | Japanese (Kanji, Hiragana, Katakana), English | `multi_PP-OCRv3_det_mobile.onnx` | `japan_PP-OCRv4_rec_mobile.onnx` | `japan_dict.txt` |
+| `OcrLanguage.korean` | Korean (Hangul), English | `multi_PP-OCRv3_det_mobile.onnx` | `korean_PP-OCRv4_rec_mobile.onnx` | `korean_dict.txt` |
+| `OcrLanguage.latin` | French, German, Spanish, Italian, Portuguese, etc. | `multi_PP-OCRv3_det_mobile.onnx` | `latin_PP-OCRv3_rec_mobile.onnx` | `latin_dict.txt` |
+| `OcrLanguage.cyrillic` | Russian, Ukrainian, Belarusian, Bulgarian, etc. | `multi_PP-OCRv3_det_mobile.onnx` | `cyrillic_PP-OCRv3_rec_mobile.onnx` | `cyrillic_dict.txt` |
+| `OcrLanguage.arabic` | Arabic, Persian, Uyghur, Urdu | `multi_PP-OCRv3_det_mobile.onnx` | `arabic_PP-OCRv4_rec_mobile.onnx` | `arabic_dict.txt` |
 | `OcrLanguage.multilingual` | Any custom PP-OCRv4/v5 language model | Custom `det.onnx` path/URL | Custom `rec.onnx` path/URL | Custom `keys.txt` path/URL |
 
 ### 2. Declare Multilingual Model Assets in `pubspec.yaml`
@@ -147,19 +149,19 @@ dependencies:
 ```yaml
 flutter:
   assets:
-    # Shared angle classifier
-    - assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx
+    # Shared angle classifier (RapidOCR v3.10.0)
+    - assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx
     # Chinese & English (default)
-    - assets/models/ch_PP-OCRv4_det_infer.onnx
-    - assets/models/ch_PP-OCRv4_rec_infer.onnx
+    - assets/models/ch_PP-OCRv4_det_mobile.onnx
+    - assets/models/ch_PP-OCRv4_rec_mobile.onnx
     - assets/models/ppocr_keys_v1.txt
     # Multilingual detection + Japanese / Korean / Latin / Cyrillic / Arabic
-    - assets/models/Multilingual_PP-OCRv3_det_infer.onnx
-    - assets/models/japan_PP-OCRv4_rec_infer.onnx
+    - assets/models/multi_PP-OCRv3_det_mobile.onnx
+    - assets/models/japan_PP-OCRv4_rec_mobile.onnx
     - assets/models/japan_dict.txt
-    - assets/models/korean_PP-OCRv4_rec_infer.onnx
+    - assets/models/korean_PP-OCRv4_rec_mobile.onnx
     - assets/models/korean_dict.txt
-    - assets/models/latin_PP-OCRv3_rec_infer.onnx
+    - assets/models/latin_PP-OCRv3_rec_mobile.onnx
     - assets/models/latin_dict.txt
 ```
 

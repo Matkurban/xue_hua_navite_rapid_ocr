@@ -1,3 +1,7 @@
+## Unreleased
+
+* Aligned ONNX model pack and asset paths with **RapidOCR v3.10.0** (`*_mobile.onnx` naming, ModelScope `resolve/v3.10.0`, SHA256 checks in `scripts/download_models.sh`).
+
 ## 1.0.0
 
 * Initial production release of `xue_hua_navite_rapid_ocr` across all 6 platforms (Android, iOS, macOS, Windows, Linux, Web).

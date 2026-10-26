@@ -1,7 +1,7 @@
 ---
 name: xue-hua-navite-rapid-ocr
 description: >-
-  Use when the user is working with xue_hua_navite_rapid_ocr APIs (XueHuaNaviteRapidOcr, OcrLiveTextOverlay, OcrLiveTextStrings, OcrModelConfig.forLanguage) to implement 6-platform offline OCR (PP-OCRv4/PP-OCRv5 ONNX), 80+ language multilingual recognition, zero-copy FFI Worker Isolate inference, WebGPU/WASM Web Worker OCR, EXIF orientation normalization, spatial paragraph clustering, or interactive Live Text selection across Android, iOS, macOS, Windows, Linux, and Web.
+  Use when the user is working with xue_hua_navite_rapid_ocr APIs (XueHuaNaviteRapidOcr, OcrLiveTextOverlay, OcrLiveTextStrings, OcrModelConfig.forLanguage) to implement 6-platform offline OCR (RapidOCR v3.10.0 PP-OCRv4/PP-OCRv5 ONNX), 80+ language multilingual recognition, zero-copy FFI Worker Isolate inference, WebGPU/WASM Web Worker OCR, EXIF orientation normalization, spatial paragraph clustering, or interactive Live Text selection across Android, iOS, macOS, Windows, Linux, and Web.
 ---
 
 # xue-hua-navite-rapid-ocr
@@ -10,11 +10,15 @@ Provide idiomatic integration patterns, 6-platform setup rules, multilingual mod
 
 ## When to Use
 
-- Initializing offline PP-OCRv4 / PP-OCRv5 ONNX pipelines or configuring 80+ language models (`XueHuaNaviteRapidOcr`, `OcrModelConfig.forLanguage`, `OcrLanguage`, `OcrExecutionProvider`)
+- Initializing offline RapidOCR v3.10.0 PP-OCRv4 / PP-OCRv5 ONNX pipelines or configuring 80+ language models (`XueHuaNaviteRapidOcr`, `OcrModelConfig.forLanguage`, `OcrLanguage`, `OcrExecutionProvider`)
 - Picking images with `xue_hua_file_operations` (`^1.5.2`) and running OCR (`recognizeBytes`, `recognizeFile`)
 - Recognizing text from camera preview frames or `ui.Image` raw pixel buffers in `RGBA8888`, `BGRA8888`, or `NV21` formats (`recognizeRawPixels`)
 - Extracting structured paragraph blocks, plain text, Markdown, or JSON from OCR results (`OcrResult.blocks`, `fullText`, `toMarkdown()`, `toJson()`)
 - Rendering interactive rotated quadrilateral text highlights with fine-grained `ValueNotifier` repaints and customizable i18n strings (`OcrLiveTextOverlay`, `OcrLiveTextController`, `OcrLiveTextStrings`)
+
+## Model Pack
+
+ONNX weights and dictionaries must match **RapidOCR v3.10.0** mobile filenames (`*_mobile.onnx`, e.g. `ch_PP-OCRv4_det_mobile.onnx`). Download with `bash scripts/download_models.sh` (ModelScope `resolve/v3.10.0`).
 
 ## Guidelines
 

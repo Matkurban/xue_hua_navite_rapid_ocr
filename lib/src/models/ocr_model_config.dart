@@ -33,7 +33,7 @@ class OcrModelConfig {
     OcrExecutionProvider executionProvider = OcrExecutionProvider.auto,
     String? detModelPathOrUrl,
     String? clsModelPathOrUrl =
-        'assets/models/ch_ppocr_mobile_v2.0_cls_infer.onnx',
+        'assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx',
     String? recModelPathOrUrl,
     String? keysPathOrUrl,
     int numThreads = 4,
