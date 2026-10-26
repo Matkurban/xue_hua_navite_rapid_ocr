@@ -38,3 +38,8 @@ if (ANDROID)
     target_link_libraries(xue_hua_navite_rapid_ocr PRIVATE ${log-lib})
   endif()
 endif()
+
+# Ensure MSVC treats source as UTF-8 so C++ string literals with Chinese OCR samples stay valid UTF-8
+if (MSVC)
+  target_compile_options(xue_hua_navite_rapid_ocr PRIVATE /utf-8)
+endif()
