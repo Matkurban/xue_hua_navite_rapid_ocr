@@ -439,6 +439,9 @@ class OnnxRapidOcr {
 
  private:
   bool LoadApi() {
+    using OrtGetApiBaseFn = const OrtApiBase*(ORT_API_CALL*)(void);
+    OrtGetApiBaseFn get_base = nullptr;
+    library_owned_ = false;
 #if defined(_WIN32)
     std::vector<std::string> names = SiblingCandidates();
     if (const char* env = std::getenv("ONNXRUNTIME_LIB")) names.insert(names.begin(), env);
@@ -448,9 +451,22 @@ class OnnxRapidOcr {
       if (library_ != nullptr) break;
     }
     if (library_ == nullptr) return false;
-    auto get_base = reinterpret_cast<const OrtApiBase*(ORT_API_CALL*)(void)>(
+    library_owned_ = true;
+    get_base = reinterpret_cast<OrtGetApiBaseFn>(
         GetProcAddress(static_cast<HMODULE>(library_), "OrtGetApiBase"));
 #else
+#if defined(XUE_HUA_ORT_LINKED)
+    // iOS vendors ONNX Runtime as a static xcframework; keep a live reference so
+    // the linker retains OrtGetApiBase, then call it without dlopen.
+    get_base = &OrtGetApiBase;
+    if (get_base != nullptr) {
+      const OrtApiBase* linked = get_base();
+      api_ = linked != nullptr ? linked->GetApi(ORT_API_VERSION) : nullptr;
+      if (api_ != nullptr) return true;
+      get_base = nullptr;
+      api_ = nullptr;
+    }
+#endif
     std::vector<std::string> names = SiblingCandidates();
     if (const char* env = std::getenv("ONNXRUNTIME_LIB")) names.insert(names.begin(), env);
     names.push_back("libonnxruntime.so.1");
@@ -461,9 +477,15 @@ class OnnxRapidOcr {
       library_ = dlopen(name.c_str(), RTLD_NOW | RTLD_LOCAL);
       if (library_ != nullptr) break;
     }
-    if (library_ == nullptr) return false;
-    auto get_base = reinterpret_cast<const OrtApiBase*(ORT_API_CALL*)(void)>(
-        dlsym(library_, "OrtGetApiBase"));
+    if (library_ != nullptr) {
+      library_owned_ = true;
+      get_base = reinterpret_cast<OrtGetApiBaseFn>(dlsym(library_, "OrtGetApiBase"));
+    } else {
+      // Already-loaded image (e.g. host linked ORT) — never dlclose RTLD_DEFAULT.
+      get_base = reinterpret_cast<OrtGetApiBaseFn>(dlsym(RTLD_DEFAULT, "OrtGetApiBase"));
+      library_ = nullptr;
+      library_owned_ = false;
+    }
 #endif
     if (get_base == nullptr) return false;
     const OrtApiBase* base = get_base();
@@ -852,9 +874,12 @@ class OnnxRapidOcr {
       if (bw <= 3.f || bh <= 3.f) continue;
       boxes.push_back(box);
     }
+    // Must be a strict weak order: a fuzzy 10px Y-band breaks libc++ hardened
+    // std::sort checks (SIGABRT on newer iOS simulator runtimes).
     std::sort(boxes.begin(), boxes.end(), [](const DetBox& a, const DetBox& b) {
-      if (std::fabs(a.quad[0].y - b.quad[0].y) <= 10.f) return a.quad[0].x < b.quad[0].x;
-      return a.quad[0].y < b.quad[0].y;
+      if (a.quad[0].y < b.quad[0].y) return true;
+      if (b.quad[0].y < a.quad[0].y) return false;
+      return a.quad[0].x < b.quad[0].x;
     });
     return boxes;
   }
@@ -973,16 +998,18 @@ class OnnxRapidOcr {
     api_ = nullptr;
     if (library_ != nullptr) {
 #if defined(_WIN32)
-      FreeLibrary(static_cast<HMODULE>(library_));
+      if (library_owned_) FreeLibrary(static_cast<HMODULE>(library_));
 #else
-      dlclose(library_);
+      if (library_owned_) dlclose(library_);
 #endif
       library_ = nullptr;
+      library_owned_ = false;
     }
   }
 
   const OrtApi* api_ = nullptr;
   void* library_ = nullptr;
+  bool library_owned_ = false;
   OrtEnv* env_ = nullptr;
   OrtSession* det_ = nullptr;
   OrtSession* cls_ = nullptr;

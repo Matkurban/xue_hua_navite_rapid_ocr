@@ -14,11 +14,37 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
   s.dependency 'Flutter'
   s.platform = :ios, '15.0'
   s.libraries = 'c++'
+  s.weak_frameworks = 'CoreML'
+  s.preserve_paths = 'Frameworks/**/*'
+  s.vendored_frameworks = 'Frameworks/onnxruntime.xcframework'
+
+  # Embed ONNX Runtime (static xcframework) for RapidOCR. Hosts: scripts/download_onnxruntime.sh
+  # Official GitHub releases omit iOS; CocoaPods trunk ships 1.20.0 which shares ORT_API_VERSION 20.
+  s.prepare_command = <<-CMD
+    set -e
+    mkdir -p Frameworks
+    ORT=""
+    if [ -d "../third_party/onnxruntime/ios/onnxruntime.xcframework" ]; then
+      ORT="../third_party/onnxruntime/ios/onnxruntime.xcframework"
+    elif [ -d "xue_hua_navite_rapid_ocr/OnnxRuntime/onnxruntime.xcframework" ]; then
+      ORT="xue_hua_navite_rapid_ocr/OnnxRuntime/onnxruntime.xcframework"
+    fi
+    if [ -z "$ORT" ]; then
+      echo "ERROR: onnxruntime.xcframework missing. Run: scripts/download_onnxruntime.sh" >&2
+      exit 1
+    fi
+    rm -rf Frameworks/onnxruntime.xcframework
+    cp -R "$ORT" Frameworks/onnxruntime.xcframework
+    echo "Embedded $ORT -> Frameworks/onnxruntime.xcframework"
+  CMD
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17'
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) XUE_HUA_ORT_LINKED=1',
+    'OTHER_CPLUSPLUSFLAGS' => '$(inherited) -DXUE_HUA_ORT_LINKED=1',
+    'OTHER_CFLAGS' => '$(inherited) -DXUE_HUA_ORT_LINKED=1'
   }
   s.swift_version = '5.9'
 end

@@ -105,3 +105,48 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "Prepared SPM Vendor + CocoaPods Libraries copies"
 fi
 
+# iOS / simulator: Microsoft ships a static onnxruntime.xcframework via the
+# CocoaPods pod-archive (GitHub release assets omit iOS). Use 1.20.0 — same
+# ORT_API_VERSION 20 as the 1.20.1 desktop dylibs this plugin dlopens.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  IOS_VERSION="1.20.0"
+  IOS_ASSET="pod-archive-onnxruntime-c-${IOS_VERSION}.zip"
+  IOS_URL="https://download.onnxruntime.ai/${IOS_ASSET}"
+  ios_dest="$ROOT/third_party/onnxruntime/ios"
+  ios_archive="$work/$IOS_ASSET"
+  mkdir -p "$ios_dest" "$work"
+  if [[ ! -d "$ios_dest/onnxruntime.xcframework" ]]; then
+    if [[ ! -f "$ios_archive" ]]; then
+      echo "GET $IOS_ASSET"
+      curl -L --fail --retry 5 --connect-timeout 30 -C - -o "$ios_archive.partial" "$IOS_URL"
+      mv "$ios_archive.partial" "$ios_archive"
+    else
+      echo "Using cached $ios_archive"
+    fi
+    ios_extract="$work/extract-ios"
+    rm -rf "$ios_extract"
+    mkdir -p "$ios_extract"
+    unzip -q "$ios_archive" -d "$ios_extract"
+    if [[ ! -d "$ios_extract/onnxruntime.xcframework" ]]; then
+      echo "Missing onnxruntime.xcframework inside $IOS_ASSET" >&2
+      exit 1
+    fi
+    rm -rf "$ios_dest/onnxruntime.xcframework"
+    mkdir -p "$ios_dest"
+    cp -R "$ios_extract/onnxruntime.xcframework" "$ios_dest/"
+    rm -rf "$ios_extract"
+    echo "OK $ios_dest/onnxruntime.xcframework"
+  else
+    echo "Using existing $ios_dest/onnxruntime.xcframework"
+  fi
+  # CocoaPods prepare_command + SwiftPM binaryTarget copies
+  mkdir -p "$ROOT/ios/Frameworks"
+  rm -rf "$ROOT/ios/Frameworks/onnxruntime.xcframework"
+  cp -R "$ios_dest/onnxruntime.xcframework" "$ROOT/ios/Frameworks/"
+  spm_ios="$ROOT/ios/xue_hua_navite_rapid_ocr/OnnxRuntime"
+  mkdir -p "$spm_ios"
+  rm -rf "$spm_ios/onnxruntime.xcframework"
+  cp -R "$ios_dest/onnxruntime.xcframework" "$spm_ios/"
+  echo "Prepared iOS Frameworks + SPM OnnxRuntime xcframework copies"
+fi
+
