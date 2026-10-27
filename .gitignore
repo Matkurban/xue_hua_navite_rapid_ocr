@@ -32,10 +32,15 @@ migrate_working_dir/
 /build/
 /coverage/
 
-# Large RapidOCR ONNX weights (download with scripts/download_models.sh)
+# Large RapidOCR ONNX weights (dart run xue_hua_navite_rapid_ocr:fetch_runtime --models)
 assets/models/*.onnx
 
-# ONNX Runtime binaries (scripts/download_onnxruntime.sh).
+# Character dictionaries are end-user downloads (OcrDictionaryStore), not plugin assets.
+assets/models/*_dict.txt
+assets/models/ppocr_keys_v1.txt
+assets/models/ppocrv5_dict.txt
+
+# ONNX Runtime binaries (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort).
 # src/third_party/onnxruntime_c_api.h stays tracked.
 /third_party/onnxruntime*
 /third_party/.onnxruntime-download/

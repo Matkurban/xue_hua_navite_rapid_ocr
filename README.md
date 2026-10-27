@@ -127,7 +127,7 @@ dependencies:
 
 ## Multilingual OCR Integration Guide (80+ Languages)
 
-> Model filenames and download URLs are aligned with **RapidOCR v3.10.0** (`ModelScope resolve/v3.10.0`, see `scripts/download_models.sh` and [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)). Native recognition loads those weights through ONNX Runtime 1.20.1 (`scripts/download_onnxruntime.sh`, then `scripts/build_native.sh`). Linux and Windows bundle `libonnxruntime` / `onnxruntime.dll` when that download is present under `third_party/onnxruntime/`. macOS Flutter builds this plugin with SwiftPM: `scripts/download_onnxruntime.sh` also copies the dylib into the SPM `Vendor/` folder so `Package.swift` embeds it in the plugin framework Resources (CocoaPods `Libraries/` remains for legacy pod installs). Sandboxed host apps need `com.apple.security.cs.disable-library-validation` (the example entitlements already set it) so RapidOCR can `dlopen` that dylib.
+> Model filenames and download URLs are aligned with **RapidOCR v3.10.0** (`ModelScope resolve/v3.10.0`, see `dart run xue_hua_navite_rapid_ocr:fetch_runtime --models` and [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)). Native recognition loads those weights through ONNX Runtime 1.20.1 (`dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`, then `dart run xue_hua_navite_rapid_ocr:fetch_runtime --build-native`). Linux and Windows bundle `libonnxruntime` / `onnxruntime.dll` when that download is present under `third_party/onnxruntime/`. macOS Flutter builds this plugin with SwiftPM: `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort` also copies the dylib into the SPM `Vendor/` folder so `Package.swift` embeds it in the plugin framework Resources (CocoaPods `Libraries/` remains for legacy pod installs). Sandboxed host apps need `com.apple.security.cs.disable-library-validation` (the example entitlements already set it) so RapidOCR can `dlopen` that dylib.
 
 `xue_hua_navite_rapid_ocr` supports 80+ languages by pairing a universal DBNet text detector (`det.onnx`), the 180° orientation classifier (`cls.onnx`), and a language-specific CrnnNet/SVTR recognition model (`rec.onnx`) + character dictionary (`keys.txt`).
 
@@ -144,51 +144,51 @@ dependencies:
 | `OcrLanguage.arabic` | Arabic, Persian, Uyghur, Urdu | `multi_PP-OCRv3_det_mobile.onnx` | `arabic_PP-OCRv4_rec_mobile.onnx` | `arabic_dict.txt` |
 | `OcrLanguage.multilingual` | Any custom PP-OCRv4/v5 language model | Custom `det.onnx` path/URL | Custom `rec.onnx` path/URL | Custom `keys.txt` path/URL |
 
-### 2. Declare Multilingual Model Assets in `pubspec.yaml`
+### 2. Developer machine: fetch ONNX Runtime + `.onnx` weights (no shell scripts)
+
+From the plugin root (or any app that depends on this package):
+
+```bash
+dart run xue_hua_navite_rapid_ocr:fetch_runtime          # ORT + models
+dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort     # ONNX Runtime only
+dart run xue_hua_navite_rapid_ocr:fetch_runtime --models  # .onnx weights only
+```
+
+CocoaPods `prepare_command` and Linux/Windows CMake call the same Dart tool when `dart` is on `PATH`. Large binaries stay gitignored under `third_party/onnxruntime/` and `assets/models/*.onnx`.
+
+Declare **model** assets in the app `pubspec.yaml` (dictionaries are **not** bundled):
 
 ```yaml
 flutter:
   assets:
-    # Shared angle classifier (RapidOCR v3.10.0)
     - assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx
-    # Chinese & English (default)
     - assets/models/ch_PP-OCRv4_det_mobile.onnx
     - assets/models/ch_PP-OCRv4_rec_mobile.onnx
-    - assets/models/ppocr_keys_v1.txt
-    # Multilingual detection + Japanese / Korean / Latin / Cyrillic / Arabic
     - assets/models/multi_PP-OCRv3_det_mobile.onnx
     - assets/models/japan_PP-OCRv4_rec_mobile.onnx
-    - assets/models/japan_dict.txt
-    - assets/models/korean_PP-OCRv4_rec_mobile.onnx
-    - assets/models/korean_dict.txt
-    - assets/models/latin_PP-OCRv3_rec_mobile.onnx
-    - assets/models/latin_dict.txt
+    # …other language `.onnx` files as needed
 ```
 
-### 3. Initialize & Dynamically Switch Languages at Runtime
+### 3. End-user apps: let users pick & download dictionaries
 
-Use `OcrModelConfig.forLanguage(...)` to automatically bind the default asset paths for any `OcrLanguage`, or override `detModelPathOrUrl`, `recModelPathOrUrl`, and `keysPathOrUrl` with custom paths or CDN URLs:
+Character dictionaries (`ppocr_keys_v1.txt`, `japan_dict.txt`, …) are listed by `OcrDictionaryCatalog` and cached with `OcrDictionaryStore` under an app documents folder. Pass the resolved path / UTF-8 text into `OcrModelConfig`:
 
 ```dart
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
-final ocr = XueHuaNaviteRapidOcr.instance;
+final docs = await getApplicationDocumentsDirectory();
+final store = OcrDictionaryStore(Directory('${docs.path}/ocr_dicts'));
 
-// Initialize with Japanese PP-OCRv4 model
-await ocr.initialize(
-  OcrModelConfig.forLanguage(
-    OcrLanguage.japanese,
-    executionProvider: OcrExecutionProvider.auto,
-    numThreads: 4,
-    enableHardwareAcceleration: true,
-    enableWebModelCache: true,
-  ),
+// Optional: show OcrDictionaryCatalog.listPacks() in a picker UI.
+final config = await store.modelConfigForLanguage(
+  OcrLanguage.japanese,
+  executionProvider: OcrExecutionProvider.auto,
 );
+store.close();
 
-// Switch to Korean or Latin on demand (safely re-initializes the Worker Isolate / Web Worker)
-await ocr.initialize(
-  OcrModelConfig.forLanguage(OcrLanguage.korean),
-);
+await XueHuaNaviteRapidOcr.instance.initialize(config);
 ```
 
 ## Full Usage Example with `xue_hua_file_operations` & `OcrLiveTextOverlay`

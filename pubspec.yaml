@@ -24,12 +24,18 @@ dependencies:
   material_ui: ^1.8.0
   plugin_platform_interface: ^2.1.8
   ffi: ^2.2.0
+  crypto: ^3.0.6
+  http: ^1.5.0
+  path: ^1.9.1
 
 dev_dependencies:
   ffigen: ^23.0.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+
+executables:
+  fetch_runtime: fetch_runtime
 
 flutter:
   plugin:
@@ -49,22 +55,6 @@ flutter:
         fileName: xue_hua_navite_rapid_ocr_web.dart
 
   assets:
-    # RapidOCR v3.10.0 ONNX models + dictionaries (scripts/download_models.sh)
-    - assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx
-    - assets/models/ch_PP-OCRv4_det_mobile.onnx
-    - assets/models/ch_PP-OCRv4_rec_mobile.onnx
-    - assets/models/ppocr_keys_v1.txt
-    - assets/models/en_PP-OCRv4_rec_mobile.onnx
-    - assets/models/en_dict.txt
-    - assets/models/multi_PP-OCRv3_det_mobile.onnx
-    - assets/models/japan_PP-OCRv4_rec_mobile.onnx
-    - assets/models/japan_dict.txt
-    - assets/models/korean_PP-OCRv4_rec_mobile.onnx
-    - assets/models/korean_dict.txt
-    - assets/models/latin_PP-OCRv3_rec_mobile.onnx
-    - assets/models/latin_dict.txt
-    - assets/models/cyrillic_PP-OCRv3_rec_mobile.onnx
-    - assets/models/cyrillic_dict.txt
-    - assets/models/arabic_PP-OCRv4_rec_mobile.onnx
-    - assets/models/arabic_dict.txt
-
+    # ONNX weights live here after `dart run xue_hua_navite_rapid_ocr:fetch_runtime --models`
+    # (*.onnx gitignored). Dictionaries are runtime downloads via OcrDictionaryStore.
+    - assets/models/

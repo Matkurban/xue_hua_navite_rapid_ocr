@@ -17,10 +17,15 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
   s.preserve_paths = 'Libraries/**/*'
   s.vendored_libraries = 'Libraries/libonnxruntime.dylib'
 
-  # Embed ONNX Runtime 1.20.1 for RapidOCR dlopen. Hosts: scripts/download_onnxruntime.sh
+  # Embed ONNX Runtime 1.20.1 for RapidOCR dlopen.
+  # Developers: `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`
   s.prepare_command = <<-CMD
     set -e
+    ROOT="$(cd .. && pwd)"
     mkdir -p Libraries
+    if command -v dart >/dev/null 2>&1; then
+      (cd "$ROOT" && dart run bin/fetch_runtime.dart --ort) || true
+    fi
     ORT=""
     ARCH="$(uname -m)"
     if [ "$ARCH" = "arm64" ] && [ -f "../third_party/onnxruntime/macos-arm64/libonnxruntime.dylib" ]; then
@@ -33,7 +38,7 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
       ORT="../third_party/onnxruntime/macos-x64/libonnxruntime.dylib"
     fi
     if [ -z "$ORT" ]; then
-      echo "ERROR: ONNX Runtime dylib missing. Run: scripts/download_onnxruntime.sh" >&2
+      echo "ERROR: ONNX Runtime dylib missing. Run: dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort" >&2
       exit 1
     fi
     cp -L "$ORT" Libraries/libonnxruntime.dylib

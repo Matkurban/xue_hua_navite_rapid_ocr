@@ -2,7 +2,7 @@
 import PackageDescription
 
 // ORT must already sit at Sources/.../Vendor/libonnxruntime.dylib
-// (scripts/download_onnxruntime.sh). Do not gate on #filePath — Flutter
+// (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort). Do not gate on #filePath — Flutter
 // evaluates this manifest from a resolved copy where that check is false.
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",

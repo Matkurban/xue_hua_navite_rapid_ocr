@@ -2,7 +2,7 @@
 import PackageDescription
 
 // ORT xcframework must already sit at OnnxRuntime/onnxruntime.xcframework
-// (scripts/download_onnxruntime.sh). Flutter evaluates this from the resolved
+// (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort). Flutter evaluates this from the resolved
 // package path under ios/xue_hua_navite_rapid_ocr.
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",

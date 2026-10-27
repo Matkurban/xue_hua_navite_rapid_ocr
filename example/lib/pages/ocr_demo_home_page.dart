@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:xue_hua_file_operations/xue_hua_file_operations.dart';
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
+import '../utils/ocr_dict_store_factory.dart';
 import '../utils/sample_image_generator.dart';
 import '../widgets/engine_config_tab.dart';
 import '../widgets/live_text_preview_tab.dart';
@@ -103,19 +104,20 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
     setState(() {
       _isBusy = true;
       _statusMessage =
-          'Initializing (${_selectedLanguage.displayName}, EP: ${_selectedProvider.wireName})...';
+          'Downloading dictionary & initializing (${_selectedLanguage.displayName}, EP: ${_selectedProvider.wireName})...';
     });
 
-    await _ocr.initialize(
-      OcrModelConfig.forLanguage(
-        _selectedLanguage,
-        executionProvider: _selectedProvider,
-        numThreads: 4,
-        enableHardwareAcceleration:
-            _selectedProvider != OcrExecutionProvider.cpu,
-        enableWebModelCache: true,
-      ),
+    final OcrDictionaryStore dictStore = await createDemoDictionaryStore();
+    final OcrModelConfig config = await dictStore.modelConfigForLanguage(
+      _selectedLanguage,
+      executionProvider: _selectedProvider,
+      numThreads: 4,
+      enableHardwareAcceleration:
+          _selectedProvider != OcrExecutionProvider.cpu,
+      enableWebModelCache: true,
     );
+    dictStore.close();
+    await _ocr.initialize(config);
 
     if (mounted) {
       setState(() {

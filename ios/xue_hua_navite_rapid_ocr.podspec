@@ -18,11 +18,16 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
   s.preserve_paths = 'Frameworks/**/*'
   s.vendored_frameworks = 'Frameworks/onnxruntime.xcframework'
 
-  # Embed ONNX Runtime (static xcframework) for RapidOCR. Hosts: scripts/download_onnxruntime.sh
+  # Embed ONNX Runtime (static xcframework) for RapidOCR.
+  # Developers: `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`
   # Official GitHub releases omit iOS; CocoaPods trunk ships 1.20.0 which shares ORT_API_VERSION 20.
   s.prepare_command = <<-CMD
     set -e
+    ROOT="$(cd .. && pwd)"
     mkdir -p Frameworks
+    if command -v dart >/dev/null 2>&1; then
+      (cd "$ROOT" && dart run bin/fetch_runtime.dart --ort) || true
+    fi
     ORT=""
     if [ -d "../third_party/onnxruntime/ios/onnxruntime.xcframework" ]; then
       ORT="../third_party/onnxruntime/ios/onnxruntime.xcframework"
@@ -30,7 +35,7 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
       ORT="xue_hua_navite_rapid_ocr/OnnxRuntime/onnxruntime.xcframework"
     fi
     if [ -z "$ORT" ]; then
-      echo "ERROR: onnxruntime.xcframework missing. Run: scripts/download_onnxruntime.sh" >&2
+      echo "ERROR: onnxruntime.xcframework missing. Run: dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort" >&2
       exit 1
     fi
     rm -rf Frameworks/onnxruntime.xcframework

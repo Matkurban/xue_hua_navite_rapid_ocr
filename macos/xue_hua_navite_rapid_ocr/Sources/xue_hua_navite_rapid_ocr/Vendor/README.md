@@ -1,3 +1,3 @@
 Place `libonnxruntime.dylib` here (gitignored).
 
-`scripts/download_onnxruntime.sh` copies it automatically on macOS.
+`dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort` copies it automatically on macOS.

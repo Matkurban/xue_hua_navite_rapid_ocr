@@ -8,7 +8,7 @@ enum OcrLanguage {
     'Chinese & English (ch_PP-OCRv4/v5)',
     'assets/models/ch_PP-OCRv4_det_mobile.onnx',
     'assets/models/ch_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/ppocr_keys_v1.txt',
+    'ppocr_keys_v1.txt',
   ),
 
   /// English & numeric high-speed recognition model (`en_PP-OCRv4`).
@@ -17,7 +17,7 @@ enum OcrLanguage {
     'English (en_PP-OCRv4)',
     'assets/models/ch_PP-OCRv4_det_mobile.onnx',
     'assets/models/en_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/en_dict.txt',
+    'en_dict.txt',
   ),
 
   /// Japanese recognition model (`japan_PP-OCRv4`).
@@ -26,7 +26,7 @@ enum OcrLanguage {
     'Japanese / 日本語 (japan_PP-OCRv4)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/japan_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/japan_dict.txt',
+    'japan_dict.txt',
   ),
 
   /// Korean recognition model (`korean_PP-OCRv4`).
@@ -35,7 +35,7 @@ enum OcrLanguage {
     'Korean / 한국어 (korean_PP-OCRv4)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/korean_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/korean_dict.txt',
+    'korean_dict.txt',
   ),
 
   /// Latin script recognition model (`latin_PP-OCRv3`, covering French, German, Spanish, Italian, Portuguese, etc.).
@@ -44,7 +44,7 @@ enum OcrLanguage {
     'Latin (French / German / Spanish / Italian / Portuguese)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/latin_PP-OCRv3_rec_mobile.onnx',
-    'assets/models/latin_dict.txt',
+    'latin_dict.txt',
   ),
 
   /// Cyrillic script recognition model (`cyrillic_PP-OCRv3`, covering Russian, Ukrainian, Belarusian, Bulgarian, etc.).
@@ -53,7 +53,7 @@ enum OcrLanguage {
     'Cyrillic / Русский (Russian / Ukrainian / Bulgarian)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/cyrillic_PP-OCRv3_rec_mobile.onnx',
-    'assets/models/cyrillic_dict.txt',
+    'cyrillic_dict.txt',
   ),
 
   /// Arabic script recognition model (`arabic_PP-OCRv4`, covering Arabic, Persian, Uyghur, Urdu).
@@ -62,16 +62,16 @@ enum OcrLanguage {
     'Arabic / العربية (arabic_PP-OCRv4)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/arabic_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/arabic_dict.txt',
+    'arabic_dict.txt',
   ),
 
-  /// Universal multilingual model supporting 80+ languages with custom `recModelPathOrUrl` and `keysPathOrUrl`.
+  /// Universal multilingual model supporting 80+ languages with custom `recModelPathOrUrl` and keys.
   multilingual(
     'multilingual_PP-OCRv4',
     'Multilingual (80+ Languages Custom Model)',
     'assets/models/multi_PP-OCRv3_det_mobile.onnx',
     'assets/models/ch_PP-OCRv4_rec_mobile.onnx',
-    'assets/models/ppocr_keys_v1.txt',
+    'ppocr_keys_v1.txt',
   );
 
   const OcrLanguage(
@@ -79,7 +79,7 @@ enum OcrLanguage {
     this.displayName,
     this.defaultDetAssetPath,
     this.defaultRecAssetPath,
-    this.defaultKeysAssetPath,
+    this.defaultKeysFileName,
   );
 
   /// Model identifier prefix.
@@ -94,8 +94,8 @@ enum OcrLanguage {
   /// Recommended default asset path for the recognition model (`rec.onnx`).
   final String defaultRecAssetPath;
 
-  /// Recommended default asset path for the character dictionary (`keys.txt`).
-  final String defaultKeysAssetPath;
+  /// Recommended dictionary file name (download via [OcrDictionaryStore], not a bundled asset).
+  final String defaultKeysFileName;
 }
 
 /// Hardware execution provider preference across Native (FFI) and Web (ONNX Runtime Web).

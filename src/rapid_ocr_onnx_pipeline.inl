@@ -565,7 +565,7 @@ class OnnxRapidOcr {
       push_dir(directory);
       if (directory.size() >= 12 &&
           directory.compare(directory.size() - 12, 12, "/Frameworks/") == 0) {
-        // App.app/Contents/Frameworks/ — copy target of embed_macos_ort_into_app.sh
+        // App.app/Contents/Frameworks/ — copy target of dart run xue_hua_navite_rapid_ocr:fetch_runtime --embed-macos-app
         push_dir(directory);
       }
       if (directory.size() >= 9 &&

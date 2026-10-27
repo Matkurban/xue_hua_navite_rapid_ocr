@@ -354,7 +354,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "ORT_SCRIPT=\"${SRCROOT}/../../scripts/embed_macos_ort_into_app.sh\"\nAPP=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}\"\nif [ -x \"$ORT_SCRIPT\" ]; then\n  \"$ORT_SCRIPT\" \"$APP\"\nelse\n  echo \"warning: missing $ORT_SCRIPT (run scripts/download_onnxruntime.sh)\"\nfi\n";
+			shellScript = "ROOT=\"${SRCROOT}/../..\"\nAPP=\"${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}\"\nif command -v dart >/dev/null 2>&1; then\n  (cd \"$ROOT\" && dart run bin/fetch_runtime.dart --embed-macos-app \"$APP\") || echo \"warning: embed ORT failed\"\nelse\n  echo \"warning: dart not on PATH; run dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort\"\nfi\n";
 		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
