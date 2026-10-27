@@ -17,9 +17,15 @@ let package = Package(
             targets: ["xue_hua_navite_rapid_ocr"]
         ),
     ],
+    dependencies: [
+        .package(name: "FlutterFramework", path: "../FlutterFramework"),
+    ],
     targets: [
         .target(
             name: "xue_hua_navite_rapid_ocr",
+            dependencies: [
+                .product(name: "FlutterFramework", package: "FlutterFramework"),
+            ],
             path: "Sources/xue_hua_navite_rapid_ocr",
             sources: ["xue_hua_navite_rapid_ocr_c_api.cpp"],
             resources: [
