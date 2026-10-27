@@ -512,9 +512,39 @@ class OnnxRapidOcr {
     };
     // Walk up from the plugin binary so Flutter macOS layouts resolve:
     // App.app/Contents/Frameworks/plugin.framework/Versions/A/plugin
-    // -> Frameworks/libonnxruntime.dylib (CocoaPods vendored_libraries).
-    for (int depth = 0; depth < 6; ++depth) {
+    // -> Frameworks/libonnxruntime.dylib (CocoaPods vendored_libraries)
+    // -> Resources/<plugin>.bundle/Contents/Resources/libonnxruntime.dylib (SwiftPM).
+    auto push_spm_bundles = [&](const std::string& contents_dir) {
+      const std::string resources = contents_dir + "Resources/";
+      names.push_back(resources + "libonnxruntime.dylib");
+      names.push_back(resources +
+                      "xue_hua_navite_rapid_ocr_xue_hua_navite_rapid_ocr.bundle/"
+                      "Contents/Resources/libonnxruntime.dylib");
+#if !defined(_WIN32)
+      DIR* dir = opendir(resources.c_str());
+      if (dir != nullptr) {
+        while (dirent* ent = readdir(dir)) {
+          const char* name = ent->d_name;
+          if (name == nullptr || name[0] == '.') continue;
+          const std::string entry(name);
+          if (entry.size() < 7 || entry.compare(entry.size() - 7, 7, ".bundle") != 0) {
+            continue;
+          }
+          names.push_back(resources + entry +
+                          "/Contents/Resources/libonnxruntime.dylib");
+          names.push_back(resources + entry +
+                          "/Contents/Resources/libonnxruntime.1.dylib");
+        }
+        closedir(dir);
+      }
+#endif
+    };
+    for (int depth = 0; depth < 8; ++depth) {
       push_dir(directory);
+      if (directory.size() >= 9 &&
+          directory.compare(directory.size() - 9, 9, "/Contents/") == 0) {
+        push_spm_bundles(directory);
+      }
       if (directory.size() <= 1) break;
       std::string parent = directory.substr(0, directory.size() - 1);
       const auto parent_slash = parent.find_last_of("/\\");
