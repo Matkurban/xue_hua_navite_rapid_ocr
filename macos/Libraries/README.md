@@ -6,7 +6,7 @@ This folder is filled by `xue_hua_navite_rapid_ocr.podspec` `prepare_command` fr
 Run from the repo root:
 
 ```bash
-scripts/download_onnxruntime.sh
+dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort
 ```
 
 Then `cd example && flutter build macos` (pod install embeds the dylib).

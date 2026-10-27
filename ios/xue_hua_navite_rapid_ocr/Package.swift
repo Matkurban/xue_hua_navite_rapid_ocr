@@ -2,8 +2,9 @@
 import PackageDescription
 
 // ORT xcframework must already sit at OnnxRuntime/onnxruntime.xcframework
-// (scripts/download_onnxruntime.sh). Flutter evaluates this from the resolved
+// (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort). Flutter evaluates this from the resolved
 // package path under ios/xue_hua_navite_rapid_ocr.
+// iOS ORT is CocoaPods 1.30.0 (API 30). XUE_HUA_ORT_LINKED makes LoadApi request GetApi(30).
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",
     platforms: [

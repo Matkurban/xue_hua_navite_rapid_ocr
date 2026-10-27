@@ -44,7 +44,7 @@ dependencies:
 
 ## 多语言（80+ 语种）集成完整指南 (`OcrLanguage` & `OcrModelConfig`)
 
-> 模型文件名与下载地址对齐 **RapidOCR v3.10.0**（`ModelScope resolve/v3.10.0`，见 `scripts/download_models.sh` 与 [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)）。原生识别通过 ONNX Runtime 1.20.1 加载这些权重（先运行 `scripts/download_onnxruntime.sh`，再运行 `scripts/build_native.sh`）。Linux 与 Windows 会在 `third_party/onnxruntime/` 中存在对应动态库时一并打包。macOS 上 Flutter 通过 SwiftPM 构建本插件：`scripts/download_onnxruntime.sh` 会把 dylib 拷进 SPM 的 `Vendor/`，由 `Package.swift` 打进 framework 的 Resources（CocoaPods 的 `Libraries/` 仍兼容旧 pod 安装）。沙盒宿主还需 `com.apple.security.cs.disable-library-validation`（example 已加），RapidOCR 才能 `dlopen` 该库。
+> 模型文件名与下载地址对齐 **RapidOCR v3.10.0**（`ModelScope resolve/v3.10.0`，见 `dart run xue_hua_navite_rapid_ocr:fetch_runtime --models` 与 [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)）。桌面 / Android 宿主使用 **ONNX Runtime 1.31.1**（先运行 `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`，再运行 `dart run xue_hua_navite_rapid_ocr:fetch_runtime --build-native`）。**iOS** 嵌入目前仍可下载的最新 CocoaPods `pod-archive-onnxruntime-c`——**1.30.0**（`ORT_API_VERSION` 30）；1.31.x 的 iOS 归档尚未发布，因此链接态 iOS 调用 `GetApi(30)`，而仓库内 C 头文件跟随桌面 1.31.1（`ORT_API_VERSION` 31）。Linux 与 Windows 会在 `third_party/onnxruntime/` 中存在对应动态库时一并打包。macOS（arm64）上 Flutter 通过 SwiftPM 构建本插件：`dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort` 会把 dylib 拷进 SPM 的 `Vendor/`，由 `Package.swift` 打进 framework 的 Resources（CocoaPods 的 `Libraries/` 仍兼容旧 pod 安装）。ORT 1.31.x 的 GitHub Release 已不再提供 `osx-x86_64`。沙盒宿主还需 `com.apple.security.cs.disable-library-validation`（example 已加），RapidOCR 才能 `dlopen` 该库。
 
 `xue_hua_navite_rapid_ocr` 支持通过切换 PP-OCRv4 / PP-OCRv5 的识别模型（`rec.onnx`）与对应字符字典（`keys.txt`）实现 80+ 语言离线识别。
 
@@ -61,62 +61,51 @@ dependencies:
 | `OcrLanguage.arabic` | 阿拉伯语、波斯语、维吾尔语、乌尔都语 | `multi_PP-OCRv3_det_mobile.onnx` | `arabic_PP-OCRv4_rec_mobile.onnx` | `arabic_dict.txt` |
 | `OcrLanguage.multilingual` | 自定义 80+ 语种模型 | 自定义 `det.onnx` 路径或 URL | 自定义 `rec.onnx` 路径或 URL | 自定义 `keys.txt` 路径或 URL |
 
-### 2. 在 `pubspec.yaml` 中声明多语言模型资源
+### 2. 开发者机器：自动拉取 ONNX Runtime 与 `.onnx` 权重（禁止 `.sh`）
+
+在插件根目录（或依赖本包的应用中）：
+
+```bash
+dart run xue_hua_navite_rapid_ocr:fetch_runtime          # ORT + 模型
+dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort     # 仅 ONNX Runtime
+dart run xue_hua_navite_rapid_ocr:fetch_runtime --models  # 仅 .onnx 权重
+```
+
+CocoaPods `prepare_command` 与 Linux/Windows CMake 在检测到 `dart` 时会调用同一工具。大文件仍 gitignore（`third_party/onnxruntime/`、`assets/models/*.onnx`）。
+
+应用 `pubspec.yaml` 只声明 **模型** 资源（字典不再作为插件必选 asset）：
 
 ```yaml
 flutter:
   assets:
-    # 通用 180° 方向分类器（RapidOCR v3.10.0）
     - assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx
-    # 默认中英混排模型
     - assets/models/ch_PP-OCRv4_det_mobile.onnx
     - assets/models/ch_PP-OCRv4_rec_mobile.onnx
-    - assets/models/ppocr_keys_v1.txt
-    # 多语言检测模型 + 日语 / 韩语 / 拉丁语 / 俄语 / 阿拉伯语识别模型与字典
     - assets/models/multi_PP-OCRv3_det_mobile.onnx
     - assets/models/japan_PP-OCRv4_rec_mobile.onnx
-    - assets/models/japan_dict.txt
-    - assets/models/korean_PP-OCRv4_rec_mobile.onnx
-    - assets/models/korean_dict.txt
-    - assets/models/latin_PP-OCRv3_rec_mobile.onnx
-    - assets/models/latin_dict.txt
+    # …按需声明其他语种 .onnx
 ```
 
-### 3. 初始化与运行时动态切换多语言
+### 3. 终端应用：让用户选择并下载字典
 
-使用 `OcrModelConfig.forLanguage(...)` 工厂方法可自动填充对应语言的默认资源路径，也可手动传入自定义路径、CDN URL 或内存字节：
+字符字典由 `OcrDictionaryCatalog` 列出，经 `OcrDictionaryStore` 缓存到应用文档目录，再写入 `OcrModelConfig.keysPathOrUrl` / `keysUtf8Text`：
 
 ```dart
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
-final ocr = XueHuaNaviteRapidOcr.instance;
+final docs = await getApplicationDocumentsDirectory();
+final store = OcrDictionaryStore(Directory('${docs.path}/ocr_dicts'));
 
-// 1. 使用中英混排模型初始化
-await ocr.initialize(
-  OcrModelConfig.forLanguage(
-    OcrLanguage.chineseAndEnglish,
-    executionProvider: OcrExecutionProvider.auto,
-  ),
+// 可用 OcrDictionaryCatalog.listPacks() 做语言包选择 UI
+final config = await store.modelConfigForLanguage(
+  OcrLanguage.japanese,
+  executionProvider: OcrExecutionProvider.auto,
 );
+store.close();
 
-// 2. 运行时动态切换为日语、韩语、俄语或阿拉伯语模型（内部自动安全重建 Isolate / Web Worker 会话）
-await ocr.initialize(
-  OcrModelConfig.forLanguage(
-    OcrLanguage.japanese,
-    executionProvider: OcrExecutionProvider.auto,
-  ),
-);
-
-// 3. 或者完全自定义任意语种的 det / cls / rec / keys 路径或 Web CDN 地址
-await ocr.initialize(
-  const OcrModelConfig(
-    language: OcrLanguage.multilingual,
-    detModelPathOrUrl: 'assets/models/multi_PP-OCRv3_det_mobile.onnx',
-    clsModelPathOrUrl: 'assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx',
-    recModelPathOrUrl: 'assets/models/arabic_PP-OCRv4_rec_mobile.onnx',
-    keysPathOrUrl: 'assets/models/arabic_dict.txt',
-  ),
-);
+await XueHuaNaviteRapidOcr.instance.initialize(config);
 ```
 
 ## 结合 `xue_hua_file_operations` 选图识别与 `OcrLiveTextOverlay` 国际化示例

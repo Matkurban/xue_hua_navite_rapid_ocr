@@ -2,7 +2,7 @@
 import PackageDescription
 
 // ORT must already sit at Sources/.../Vendor/libonnxruntime.dylib
-// (scripts/download_onnxruntime.sh). Do not gate on #filePath — Flutter
+// (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort). Do not gate on #filePath — Flutter
 // evaluates this manifest from a resolved copy where that check is false.
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",
@@ -17,9 +17,15 @@ let package = Package(
             targets: ["xue_hua_navite_rapid_ocr"]
         ),
     ],
+    dependencies: [
+        .package(name: "FlutterFramework", path: "../FlutterFramework"),
+    ],
     targets: [
         .target(
             name: "xue_hua_navite_rapid_ocr",
+            dependencies: [
+                .product(name: "FlutterFramework", package: "FlutterFramework"),
+            ],
             path: "Sources/xue_hua_navite_rapid_ocr",
             sources: ["xue_hua_navite_rapid_ocr_c_api.cpp"],
             resources: [
@@ -33,7 +39,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("c++"),
                 .unsafeFlags([
-                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path",
+                    // Flutter already adds @loader_path; only extend for Vendor dylib + Frameworks.
                     "-Xlinker", "-rpath", "-Xlinker", "@loader_path/Resources",
                     "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks",
                 ], .when(platforms: [.macOS])),

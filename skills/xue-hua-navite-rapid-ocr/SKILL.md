@@ -18,7 +18,7 @@ Provide idiomatic integration patterns, 6-platform setup rules, multilingual mod
 
 ## Model Pack
 
-ONNX weights and dictionaries must match **RapidOCR v3.10.0** mobile filenames (`*_mobile.onnx`, e.g. `ch_PP-OCRv4_det_mobile.onnx`). Download with `bash scripts/download_models.sh` (ModelScope `resolve/v3.10.0`).
+ONNX weights must match **RapidOCR v3.10.0** mobile filenames (`*_mobile.onnx`, e.g. `ch_PP-OCRv4_det_mobile.onnx`). Download with `bash `dart run xue_hua_navite_rapid_ocr:fetch_runtime --models` (ModelScope `resolve/v3.10.0`).
 
 ## Guidelines
 

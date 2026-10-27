@@ -6,7 +6,10 @@ import 'ocr_enums.dart';
 ///
 /// Supports loading `.onnx` models (`det.onnx`, `cls.onnx`, `rec.onnx`) and `keys.txt`
 /// from local filesystem paths, Flutter asset keys (`assets/...`), remote/CDN URLs (Web),
-/// or preloaded in-memory [Uint8List] buffers.
+/// or preloaded in-memory [Uint8List] / UTF-8 buffers.
+///
+/// Character dictionaries are **not** mandatory plugin assets. Prefer downloading a pack
+/// with [OcrDictionaryStore] and passing [keysPathOrUrl] / [keysUtf8Text].
 class OcrModelConfig {
   const OcrModelConfig({
     this.language = OcrLanguage.chineseAndEnglish,
@@ -24,10 +27,15 @@ class OcrModelConfig {
     this.enableWebModelCache = true,
     this.webCacheName = 'xue_hua_rapid_ocr_onnx_cache_v1',
     this.webOrtScriptUrl =
-        'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js',
+        'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.min.js',
   });
 
-  /// Convenience factory that populates default asset paths for a specific [OcrLanguage].
+  /// Convenience factory that populates default **model** asset paths for a
+  /// specific [OcrLanguage].
+  ///
+  /// Dictionary keys default to `null` unless [keysPathOrUrl] or [keysUtf8Text]
+  /// is provided — apps should download packs via [OcrDictionaryStore] (or pass
+  /// a remote URL on Web).
   factory OcrModelConfig.forLanguage(
     OcrLanguage language, {
     OcrExecutionProvider executionProvider = OcrExecutionProvider.auto,
@@ -36,6 +44,7 @@ class OcrModelConfig {
         'assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx',
     String? recModelPathOrUrl,
     String? keysPathOrUrl,
+    String? keysUtf8Text,
     int numThreads = 4,
     bool enableHardwareAcceleration = true,
     bool enableWebModelCache = true,
@@ -46,7 +55,8 @@ class OcrModelConfig {
       detModelPathOrUrl: detModelPathOrUrl ?? language.defaultDetAssetPath,
       clsModelPathOrUrl: clsModelPathOrUrl,
       recModelPathOrUrl: recModelPathOrUrl ?? language.defaultRecAssetPath,
-      keysPathOrUrl: keysPathOrUrl ?? language.defaultKeysAssetPath,
+      keysPathOrUrl: keysPathOrUrl,
+      keysUtf8Text: keysUtf8Text,
       numThreads: numThreads,
       enableHardwareAcceleration: enableHardwareAcceleration,
       enableWebModelCache: enableWebModelCache,

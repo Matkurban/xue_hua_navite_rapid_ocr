@@ -86,7 +86,7 @@ class EngineConfigTab extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text('• det: ${selectedLanguage.defaultDetAssetPath}'),
                 Text('• rec: ${selectedLanguage.defaultRecAssetPath}'),
-                Text('• keys: ${selectedLanguage.defaultKeysAssetPath}'),
+                Text('• keys: ${selectedLanguage.defaultKeysFileName}'),
               ],
             ),
           ),

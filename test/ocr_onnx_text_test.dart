@@ -5,8 +5,7 @@ import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
 /// Real RapidOCR text. Skips when the host has not downloaded models, ONNX
 /// Runtime 1.20.1, or a CMake build of the plugin:
-/// `scripts/download_models.sh`, `scripts/download_onnxruntime.sh`,
-/// `scripts/build_native.sh`.
+/// `dart run xue_hua_navite_rapid_ocr:fetch_runtime --all --build-native`.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -25,7 +24,6 @@ void main() {
         File('assets/models/ch_PP-OCRv4_det_mobile.onnx'),
         File('assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx'),
         File('assets/models/ch_PP-OCRv4_rec_mobile.onnx'),
-        File('assets/models/ppocr_keys_v1.txt'),
         File('test/fixtures/rapidocr_hello_zh.png'),
         File('example/ocr_overlay_complaint.png'),
       ];
@@ -34,20 +32,23 @@ void main() {
           required.any((File file) => !file.existsSync())) {
         markTestSkipped(
           'ONNX models, ONNX Runtime, or build/native are absent. '
-          'Run scripts/download_models.sh, scripts/download_onnxruntime.sh, '
-          'and scripts/build_native.sh.',
+          'Run: dart run xue_hua_navite_rapid_ocr:fetch_runtime --all --build-native',
         );
       }
 
-      final XueHuaNaviteRapidOcr ocr = XueHuaNaviteRapidOcr();
-      await ocr.initialize(
-        OcrModelConfig.forLanguage(
-          OcrLanguage.chineseAndEnglish,
-          executionProvider: OcrExecutionProvider.cpu,
-          numThreads: 4,
-          enableHardwareAcceleration: false,
-        ),
+      final Directory dictDir =
+          Directory('build/test_ocr_dicts')..createSync(recursive: true);
+      final OcrDictionaryStore store = OcrDictionaryStore(dictDir);
+      final OcrModelConfig config = await store.modelConfigForLanguage(
+        OcrLanguage.chineseAndEnglish,
+        executionProvider: OcrExecutionProvider.cpu,
+        numThreads: 4,
+        enableHardwareAcceleration: false,
       );
+      store.close();
+
+      final XueHuaNaviteRapidOcr ocr = XueHuaNaviteRapidOcr();
+      await ocr.initialize(config);
       addTearDown(ocr.dispose);
 
       final OcrResult hello = await ocr.recognizeBytes(

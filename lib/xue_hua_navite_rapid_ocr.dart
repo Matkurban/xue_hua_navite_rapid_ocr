@@ -20,3 +20,11 @@ export 'src/widgets/ocr_live_text_painter.dart';
 export 'src/widgets/ocr_live_text_strings.dart';
 export 'src/widgets/ocr_live_text_style.dart';
 export 'src/xue_hua_navite_rapid_ocr_client.dart';
+export 'src/runtime/ocr_dictionary_catalog.dart';
+export 'src/runtime/ocr_dictionary_store.dart';
+export 'src/runtime/ocr_runtime_assets.dart'
+    show
+        OcrOnnxModelAsset,
+        kDefaultOnnxModelAssets,
+        kOnnxRuntimeVersion,
+        kRapidOcrModelScopeBase;
