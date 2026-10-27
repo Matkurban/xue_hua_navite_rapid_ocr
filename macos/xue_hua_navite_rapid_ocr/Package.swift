@@ -39,7 +39,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("c++"),
                 .unsafeFlags([
-                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path",
+                    // Flutter already adds @loader_path; only extend for Vendor dylib + Frameworks.
                     "-Xlinker", "-rpath", "-Xlinker", "@loader_path/Resources",
                     "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks",
                 ], .when(platforms: [.macOS])),
