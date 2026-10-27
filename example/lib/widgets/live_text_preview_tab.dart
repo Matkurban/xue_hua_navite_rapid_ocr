@@ -40,35 +40,44 @@ class LiveTextPreviewTab extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: OcrLiveTextOverlay(
-                image: MemoryImage(bytes),
-                ocrResult: result,
-                controller: controller,
-                strings: liveTextStrings,
-                onSelectionChanged: onSelectionChanged,
-                customActions: <OcrLiveTextCustomAction>[
-                  OcrLiveTextCustomAction(
-                    label: 'JSON',
-                    icon: Icons.data_object_rounded,
-                    onPressed:
-                        (String text, List<OcrTextLine> selectedLines) async {
-                          final String jsonStr =
-                              const JsonEncoder.withIndent('  ').convert(
-                                selectedLines
-                                    .map((OcrTextLine l) => l.toJson())
-                                    .toList(),
-                              );
-                          await Clipboard.setData(ClipboardData(text: jsonStr));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Copied selected lines JSON!'),
-                              ),
-                            );
-                          }
-                        },
+              child: ColoredBox(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: OcrLiveTextOverlay(
+                  image: MemoryImage(bytes),
+                  ocrResult: result,
+                  controller: controller,
+                  strings: liveTextStrings,
+                  layout: const OcrLiveTextLayout(
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
                   ),
-                ],
+                  onSelectionChanged: onSelectionChanged,
+                  customActions: <OcrLiveTextCustomAction>[
+                    OcrLiveTextCustomAction(
+                      label: 'JSON',
+                      icon: Icons.data_object_rounded,
+                      onPressed:
+                          (String text, List<OcrTextLine> selectedLines) async {
+                            final String jsonStr =
+                                const JsonEncoder.withIndent('  ').convert(
+                                  selectedLines
+                                      .map((OcrTextLine l) => l.toJson())
+                                      .toList(),
+                                );
+                            await Clipboard.setData(
+                              ClipboardData(text: jsonStr),
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Copied selected lines JSON!'),
+                                ),
+                              );
+                            }
+                          },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

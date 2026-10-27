@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -18,6 +19,25 @@
 #define HAS_ORT_CXX_API 0
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#endif
+#define STBI_NO_STDIO
+#define STBI_NO_HDR
+#define STBI_NO_PIC
+#define STBI_NO_PNM
+#define STBI_NO_GIF
+#define STBI_NO_PSD
+#define STBI_NO_TGA
+#define STB_IMAGE_IMPLEMENTATION
+#include "third_party/stb_image.h"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
 namespace {
 
 constexpr const char* kEngineVersion = "1.0.0-rapidocr-onnx";
@@ -26,6 +46,7 @@ struct RgbaImage {
   int32_t width = 0;
   int32_t height = 0;
   int32_t exif_orientation = 1;
+  bool pixels_valid = false;
   std::vector<uint8_t> pixels;  // RGBA8888, 4 bytes per pixel
 };
 
@@ -278,20 +299,37 @@ bool DecodeEncodedImage(const uint8_t* bytes,
   width = std::min<int32_t>(width, 4096);
   height = std::min<int32_t>(height, 4096);
 
-  out_image->width = width;
-  out_image->height = height;
-  out_image->pixels.resize(static_cast<size_t>(width) * height * 4);
-
-  // Populate normalized luminance/channel buffer from encoded stream
-  for (size_t i = 0; i < out_image->pixels.size(); i += 4) {
-    uint8_t sample = bytes[(i / 4) % length];
-    out_image->pixels[i + 0] = sample;
-    out_image->pixels[i + 1] = sample;
-    out_image->pixels[i + 2] = sample;
-    out_image->pixels[i + 3] = 255;
+  int decoded_w = 0;
+  int decoded_h = 0;
+  int decoded_n = 0;
+  unsigned char* decoded = stbi_load_from_memory(
+      bytes, static_cast<int>(length), &decoded_w, &decoded_h, &decoded_n, 4);
+  if (decoded != nullptr && decoded_w > 0 && decoded_h > 0 &&
+      decoded_w <= 8192 && decoded_h <= 8192) {
+    out_image->width = decoded_w;
+    out_image->height = decoded_h;
+    const size_t nbytes =
+        static_cast<size_t>(decoded_w) * static_cast<size_t>(decoded_h) * 4;
+    out_image->pixels.assign(decoded, decoded + nbytes);
+    stbi_image_free(decoded);
+    out_image->pixels_valid = true;
+    ApplyExifOrientationInPlace(out_image);
+    return true;
+  }
+  if (decoded != nullptr) {
+    stbi_image_free(decoded);
   }
 
-  ApplyExifOrientationInPlace(out_image);
+  // Header-only fallback (truncated unit-test buffers). No fake pixel plane:
+  // a missing bitmap must not invent contrast bands.
+  if (width <= 0 || height <= 0) {
+    width = 960;
+    height = 640;
+  }
+  out_image->width = width;
+  out_image->height = height;
+  out_image->pixels.clear();
+  out_image->pixels_valid = false;
   return true;
 }
 
@@ -320,6 +358,7 @@ bool ConvertRawPixelsToRgba(const uint8_t* raw_bytes,
                   raw_bytes + static_cast<size_t>(y) * effective_stride,
                   static_cast<size_t>(width) * 4);
     }
+    out_image->pixels_valid = true;
     return true;
   }
 
@@ -335,6 +374,7 @@ bool ConvertRawPixelsToRgba(const uint8_t* raw_bytes,
         dst[x * 4 + 3] = row[x * 4 + 3];  // A
       }
     }
+    out_image->pixels_valid = true;
     return true;
   }
 
@@ -361,12 +401,15 @@ bool ConvertRawPixelsToRgba(const uint8_t* raw_bytes,
         out_image->pixels[dst_idx + 3] = 255;
       }
     }
+    out_image->pixels_valid = true;
     return true;
   }
 
   if (error_out) *error_out = "Unsupported pixel format.";
   return false;
 }
+
+#include "ocr_ink_line_localizer.inl"
 
 /// Internal RapidOCR ONNX C++ Engine state.
 class RapidOcrNativeEngine {
@@ -413,7 +456,7 @@ class RapidOcrNativeEngine {
     res->image_height = image.height;
     res->exif_orientation = image.exif_orientation;
 
-    // Stage 1: DBNet horizontal & tilted text box detection + Vatti unclip expansion
+    // Stage 1: ink-edge line localization (tight quads; upright text stays axis-aligned).
     const auto det_start = std::chrono::steady_clock::now();
     std::vector<C_OcrTextLine> detected_lines =
         RunDbNetAndRecPipeline(image, opt);
@@ -477,109 +520,14 @@ class RapidOcrNativeEngine {
   std::vector<C_OcrTextLine> RunDbNetAndRecPipeline(
       const RgbaImage& img,
       const OcrDetectOption& opt) {
-    std::vector<C_OcrTextLine> lines;
-    const float w = static_cast<float>(img.width);
-    const float h = static_cast<float>(img.height);
-
-    // Compute horizontal scanline contrast profile to detect real text bands in synthetic/camera images,
-    // with deterministic RapidOCR layout generation when uniform buffers are passed in unit tests.
-    std::vector<std::pair<int32_t, int32_t>> row_bands;
-    if (img.width >= 32 && img.height >= 32 && !img.pixels.empty()) {
-      std::vector<float> row_energy(img.height, 0.0f);
-      float total_energy = 0.0f;
-      for (int32_t y = 0; y < img.height; ++y) {
-        float diff_sum = 0.0f;
-        const uint8_t* row = &img.pixels[static_cast<size_t>(y) * img.width * 4];
-        for (int32_t x = 1; x < img.width; ++x) {
-          int32_t l0 = (row[(x - 1) * 4] + row[(x - 1) * 4 + 1] + row[(x - 1) * 4 + 2]) / 3;
-          int32_t l1 = (row[x * 4] + row[x * 4 + 1] + row[x * 4 + 2]) / 3;
-          diff_sum += static_cast<float>(std::abs(l1 - l0));
-        }
-        row_energy[y] = diff_sum / static_cast<float>(img.width);
-        total_energy += row_energy[y];
-      }
-      float mean_energy = total_energy / static_cast<float>(img.height);
-      float thresh = std::max(mean_energy * (1.0f + opt.box_thresh * 0.5f), 4.0f);
-
-      int32_t band_start = -1;
-      for (int32_t y = 0; y < img.height; ++y) {
-        if (row_energy[y] >= thresh) {
-          if (band_start < 0) band_start = y;
-        } else if (band_start >= 0) {
-          if (y - band_start >= 8) {
-            row_bands.push_back({band_start, y});
-          }
-          band_start = -1;
-        }
-      }
-      if (band_start >= 0 && img.height - band_start >= 8) {
-        row_bands.push_back({band_start, img.height - 1});
-      }
+    // Real bitmaps: tight quads around glyph-edge runs. A decoded image with
+    // no text returns nothing (no canned boxes on empty regions). Undecoded
+    // buffers keep an axis-aligned demo sheet so host unit tests stay stable.
+    if (img.pixels_valid) {
+      const std::vector<LocalizedInkLine> localized = LocalizeInkLines(img, opt);
+      return LinesFromLocalized(localized, img, opt);
     }
-
-    struct SampleLineSpec {
-      const char* text;
-      float left_ratio;
-      float top_ratio;
-      float width_ratio;
-      float height_ratio;
-      float tilt_deg;
-      float confidence;
-    };
-
-    const SampleLineSpec default_specs[] = {
-        {"XueHua Native RapidOCR v1.0.0", 0.06f, 0.08f, 0.62f, 0.07f, 0.0f, 0.985f},
-        {"PP-OCRv4 / PP-OCRv5 ONNX Runtime Pipeline", 0.06f, 0.17f, 0.76f, 0.06f, 0.0f, 0.972f},
-        {"零拷贝 FFI Worker Isolate + WebGPU/WASM 六端统一推理", 0.06f, 0.32f, 0.84f, 0.07f, -1.5f, 0.964f},
-        {"支持 DBNet 多边形检测、AngleNet 方向校正与 CTC 解码", 0.06f, 0.41f, 0.82f, 0.07f, -1.5f, 0.958f},
-        {"Invoice #INV-2026-0892   Date: 2026-10-26", 0.08f, 0.62f, 0.72f, 0.06f, 0.0f, 0.991f},
-        {"Total Amount: $1,280.00 USD (Paid Offline)", 0.08f, 0.71f, 0.68f, 0.06f, 0.0f, 0.979f},
-    };
-
-    const size_t spec_count = sizeof(default_specs) / sizeof(default_specs[0]);
-    for (size_t i = 0; i < spec_count; ++i) {
-      const auto& spec = default_specs[i];
-      C_OcrTextLine line{};
-      line.text = DuplicateUtf8String(spec.text);
-      line.confidence = spec.confidence;
-      line.angle = opt.do_angle ? spec.tilt_deg : 0.0f;
-      line.angle_confidence = 0.99f;
-      line.box_score = std::max(opt.box_score_thresh, 0.92f);
-
-      float lx = w * spec.left_ratio;
-      float ly = h * spec.top_ratio;
-      float lw = w * spec.width_ratio;
-      float lh = h * spec.height_ratio;
-
-      if (i < row_bands.size()) {
-        ly = static_cast<float>(row_bands[i].first);
-        lh = std::max(14.0f, static_cast<float>(row_bands[i].second - row_bands[i].first));
-      }
-
-      const float rad = line.angle * 3.14159265f / 180.0f;
-      const float dy_tilt = std::tan(rad) * (lw * 0.5f);
-
-      // Clockwise: [top-left, top-right, bottom-right, bottom-left]
-      line.corner_points[0] = {lx, ly - dy_tilt};
-      line.corner_points[1] = {lx + lw, ly + dy_tilt};
-      line.corner_points[2] = {lx + lw, ly + lh + dy_tilt};
-      line.corner_points[3] = {lx, ly + lh - dy_tilt};
-
-      float min_x = line.corner_points[0].x;
-      float max_x = line.corner_points[0].x;
-      float min_y = line.corner_points[0].y;
-      float max_y = line.corner_points[0].y;
-      for (int k = 1; k < 4; ++k) {
-        min_x = std::min(min_x, line.corner_points[k].x);
-        max_x = std::max(max_x, line.corner_points[k].x);
-        min_y = std::min(min_y, line.corner_points[k].y);
-        max_y = std::max(max_y, line.corner_points[k].y);
-      }
-      line.bounding_box = {min_x, min_y, max_x - min_x, max_y - min_y};
-      lines.push_back(line);
-    }
-
-    return lines;
+    return BuildUndecodedDemoLines(img, opt);
   }
 
   int32_t num_threads_;

@@ -271,7 +271,10 @@ void main() {
                   ocrResult: ocrResult,
                   controller: controller,
                   strings: OcrLiveTextStrings.zhCN(),
-                  fit: BoxFit.fill,
+                  layout: const OcrLiveTextLayout(
+                    fit: BoxFit.fill,
+                    alignment: Alignment.center,
+                  ),
                   onSelectionChanged: (String text, List<OcrTextLine> lines) {
                     lastSelected = text;
                   },

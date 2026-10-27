@@ -113,7 +113,10 @@ class _DocumentLiveTextViewState extends State<DocumentLiveTextView> {
       ocrResult: widget.ocrResult,
       controller: _controller,
       strings: OcrLiveTextStrings.zhCN(),
-      fit: BoxFit.contain,
+      layout: const OcrLiveTextLayout(
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+      ),
       onSelectionChanged: (String selectedText, List<OcrTextLine> lines) {
         debugPrint('Selected ${lines.length} lines: $selectedText');
       },
@@ -135,4 +138,4 @@ class _DocumentLiveTextViewState extends State<DocumentLiveTextView> {
 
 - **Use `package:material_ui/material_ui.dart`**: Do not import `package:flutter/material.dart`.
 - **Web Compilation (`dart:ffi` / `dart:io` Leak)**: Never import `dart:ffi` or `dart:io` in files shared with Web. Always pass `file.bytes!` from `XueHuaFileOperations.instance.pickFile(withData: true)` to `recognizeBytes(Uint8List)` on Web.
-- **EXIF Orientation**: Both the Native C++ decoder and Web `createImageBitmap(..., { imageOrientation: 'from-image' })` normalize EXIF orientation (`1..8`) before DBNet inference so returned `cornerPoints` always match the upright displayed image (`result.imageWidth` x `result.imageHeight`).
+- **EXIF and Live Text layout**: Detection reports corners in corrected pixels (`result.imageWidth` x `result.imageHeight`, EXIF 1–8). `OcrLiveTextOverlay` maps those corners into the decoded bitmap (EXIF inverse when the codec left the raw size, otherwise per-axis scale) and then applies `OcrLiveTextLayout` (`BoxFit`, `Alignment`, and `ImageInfo.scale`). Do not pass a separate `fit` argument.

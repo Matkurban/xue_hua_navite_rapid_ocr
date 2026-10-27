@@ -1,21 +1,27 @@
-import 'dart:math' as math;
-
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../models/ocr_result.dart';
 import '../models/ocr_text_line.dart';
+import 'ocr_exif_coordinate_mapper.dart';
 import 'ocr_image_coordinate_transform.dart';
 import 'ocr_live_text_controller.dart';
 import 'ocr_live_text_custom_action.dart';
+import 'ocr_live_text_geometry.dart';
+import 'ocr_live_text_layout.dart';
 import 'ocr_live_text_painter.dart';
 import 'ocr_live_text_strings.dart';
+import 'ocr_live_text_style.dart';
 
+export 'ocr_exif_coordinate_mapper.dart';
 export 'ocr_image_coordinate_transform.dart';
 export 'ocr_live_text_controller.dart';
 export 'ocr_live_text_custom_action.dart';
+export 'ocr_live_text_geometry.dart';
+export 'ocr_live_text_layout.dart';
 export 'ocr_live_text_painter.dart';
 export 'ocr_live_text_strings.dart';
+export 'ocr_live_text_style.dart';
 
 /// Interactive 6-platform "Live Text" overlay widget (`OcrLiveTextOverlay`).
 ///
@@ -34,18 +40,12 @@ class OcrLiveTextOverlay extends StatefulWidget {
     required this.ocrResult,
     this.controller,
     this.strings = const OcrLiveTextStrings(),
-    this.fit = BoxFit.contain,
+    this.layout = const OcrLiveTextLayout.contain(),
+    this.style = const OcrLiveTextStyle(),
     this.initialShowHighlights = true,
     this.showFloatingToolbar = true,
     this.showToggleHighlightsButton = true,
     this.copyOnSingleTap = false,
-    this.highlightFillColor = const Color(0x282196F3),
-    this.highlightBorderColor = const Color(0x992196F3),
-    this.selectedFillColor = const Color(0x4D1976D2),
-    this.selectedBorderColor = const Color(0xFF1565C0),
-    this.hoveredFillColor = const Color(0x3842A5F5),
-    this.marqueeFillColor = const Color(0x261E88E5),
-    this.marqueeBorderColor = const Color(0xCC1E88E5),
     this.onSelectionChanged,
     this.onTextCopied,
     this.customActions = const <OcrLiveTextCustomAction>[],
@@ -63,8 +63,11 @@ class OcrLiveTextOverlay extends StatefulWidget {
   /// Customizable localization strings for all buttons, tooltips, and SnackBar messages.
   final OcrLiveTextStrings strings;
 
-  /// How the image and OCR coordinate space should be inscribed into the layout box.
-  final BoxFit fit;
+  /// Fit, alignment, and filter quality shared by the [Image] and the highlights.
+  final OcrLiveTextLayout layout;
+
+  /// Colors, outset, score floors, and the upright-quad snap.
+  final OcrLiveTextStyle style;
 
   /// Whether highlight boxes are initially visible when [controller] is not provided.
   final bool initialShowHighlights;
@@ -77,27 +80,6 @@ class OcrLiveTextOverlay extends StatefulWidget {
 
   /// If `true`, tapping a single text box immediately copies its text to the system clipboard.
   final bool copyOnSingleTap;
-
-  /// Unselected text box fill color.
-  final Color highlightFillColor;
-
-  /// Unselected text box border color.
-  final Color highlightBorderColor;
-
-  /// Selected text box fill color.
-  final Color selectedFillColor;
-
-  /// Selected text box border color.
-  final Color selectedBorderColor;
-
-  /// Hovered text box fill color on Desktop & Web.
-  final Color hoveredFillColor;
-
-  /// Drag selection rectangle/lasso fill color.
-  final Color marqueeFillColor;
-
-  /// Drag selection rectangle/lasso border color.
-  final Color marqueeBorderColor;
 
   /// Callback fired whenever the selected lines change.
   final void Function(String selectedText, List<OcrTextLine> selectedLines)?
@@ -126,6 +108,14 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
   final ValueNotifier<Rect?> _dragMarqueeNotifier = ValueNotifier<Rect?>(null);
   Offset? _dragStartLocal;
 
+  /// Decoded bitmap size and [ImageInfo.scale]. Resolved once per provider so
+  /// BoxFit uses the same pixels [Image] paints. Hover and selection do not
+  /// touch these fields.
+  ImageStream? _imageStream;
+  ImageStreamListener? _imageListener;
+  Size? _decodedPixelSize;
+  double _decodedImageScale = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +136,12 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
       duration: const Duration(milliseconds: 220),
       value: _controller.showHighlightBoxes ? 1.0 : 0.0,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolveImageStream();
   }
 
   @override
@@ -176,10 +172,58 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
       _hoveredLineIndexNotifier.value = null;
       _dragMarqueeNotifier.value = null;
     }
+    if (oldWidget.image != widget.image) {
+      _decodedPixelSize = null;
+      _decodedImageScale = 1.0;
+      _resolveImageStream();
+    }
+  }
+
+  void _resolveImageStream() {
+    final ImageStream stream = widget.image.resolve(
+      createLocalImageConfiguration(context),
+    );
+    if (identical(stream, _imageStream) || stream.key == _imageStream?.key) {
+      return;
+    }
+    _detachImageStream();
+    _imageStream = stream;
+    _imageListener = ImageStreamListener((
+      ImageInfo info,
+      bool synchronousCall,
+    ) {
+      final Size size = Size(
+        info.image.width.toDouble(),
+        info.image.height.toDouble(),
+      );
+      final double scale = info.scale == 0 ? 1.0 : info.scale;
+      info.dispose();
+      if (_decodedPixelSize == size && _decodedImageScale == scale) return;
+      if (synchronousCall || !mounted) {
+        _decodedPixelSize = size;
+        _decodedImageScale = scale;
+        return;
+      }
+      setState(() {
+        _decodedPixelSize = size;
+        _decodedImageScale = scale;
+      });
+    }, onError: (Object error, StackTrace? stackTrace) {});
+    _imageStream!.addListener(_imageListener!);
+  }
+
+  void _detachImageStream() {
+    final ImageStreamListener? listener = _imageListener;
+    if (_imageStream != null && listener != null) {
+      _imageStream!.removeListener(listener);
+    }
+    _imageStream = null;
+    _imageListener = null;
   }
 
   @override
   void dispose() {
+    _detachImageStream();
     _controller.showHighlightBoxesListenable.removeListener(
       _onHighlightVisibilityChanged,
     );
@@ -240,13 +284,23 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
           constraints.maxWidth.isFinite ? constraints.maxWidth : 640,
           constraints.maxHeight.isFinite ? constraints.maxHeight : 480,
         );
+        final OcrDisplayedImageSpace displaySpace =
+            OcrDisplayedImageSpace.resolve(
+              correctedWidth: widget.ocrResult.imageWidth,
+              correctedHeight: widget.ocrResult.imageHeight,
+              exifOrientation: widget.ocrResult.exifOrientation,
+              decodedPixelSize: _decodedPixelSize,
+            );
         final OcrImageCoordinateTransform transform =
             OcrImageCoordinateTransform.compute(
               containerSize: containerSize,
-              imageWidth: math.max(1, widget.ocrResult.imageWidth).toDouble(),
-              imageHeight: math.max(1, widget.ocrResult.imageHeight).toDouble(),
-              fit: widget.fit,
+              imageWidth: displaySpace.imageWidth,
+              imageHeight: displaySpace.imageHeight,
+              fit: widget.layout.fit,
+              alignment: widget.layout.alignment,
+              imageScale: _decodedImageScale,
             );
+        final List<_PreparedLine> prepared = _prepareLines(displaySpace);
 
         return Stack(
           fit: StackFit.expand,
@@ -254,7 +308,10 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
             // 1. Underlying Image (never rebuilt on hover/selection/drag)
             Image(
               image: widget.image,
-              fit: widget.fit,
+              fit: widget.layout.fit,
+              alignment: widget.layout.alignment,
+              filterQuality: widget.layout.filterQuality,
+              gaplessPlayback: true,
               width: containerSize.width,
               height: containerSize.height,
             ),
@@ -272,6 +329,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                         final int? hit = _hitTestLineIndex(
                           event.localPosition,
                           transform,
+                          prepared,
                         );
                         if (_hoveredLineIndexNotifier.value != hit) {
                           _hoveredLineIndexNotifier.value = hit;
@@ -291,6 +349,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                   final int? hit = _hitTestLineIndex(
                     details.localPosition,
                     transform,
+                    prepared,
                   );
                   if (hit != null) {
                     final Set<int> current = Set<int>.from(
@@ -328,7 +387,11 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                       details.localPosition,
                     );
                     _dragMarqueeNotifier.value = marquee;
-                    final Set<int> hits = _hitTestMarquee(marquee, transform);
+                    final Set<int> hits = _hitTestMarquee(
+                      marquee,
+                      transform,
+                      prepared,
+                    );
                     _controller.setSelection(hits);
                   }
                 },
@@ -343,20 +406,26 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                 },
                 child: CustomPaint(
                   painter: OcrLiveTextPainter(
-                    lines: widget.ocrResult.lines,
+                    lines: prepared
+                        .map((_PreparedLine line) => line.line)
+                        .toList(growable: false),
+                    sourceIndices: prepared
+                        .map((_PreparedLine line) => line.sourceIndex)
+                        .toList(growable: false),
+                    highlightOutset: widget.style.highlightOutset,
                     transform: transform,
                     selectedIndicesListenable:
                         _controller.selectedIndicesListenable,
                     hoveredIndexListenable: _hoveredLineIndexNotifier,
                     highlightOpacityListenable: _fadeController,
                     dragMarqueeListenable: _dragMarqueeNotifier,
-                    highlightFillColor: widget.highlightFillColor,
-                    highlightBorderColor: widget.highlightBorderColor,
-                    selectedFillColor: widget.selectedFillColor,
-                    selectedBorderColor: widget.selectedBorderColor,
-                    hoveredFillColor: widget.hoveredFillColor,
-                    marqueeFillColor: widget.marqueeFillColor,
-                    marqueeBorderColor: widget.marqueeBorderColor,
+                    highlightFillColor: widget.style.highlightFillColor,
+                    highlightBorderColor: widget.style.highlightBorderColor,
+                    selectedFillColor: widget.style.selectedFillColor,
+                    selectedBorderColor: widget.style.selectedBorderColor,
+                    hoveredFillColor: widget.style.hoveredFillColor,
+                    marqueeFillColor: widget.style.marqueeFillColor,
+                    marqueeBorderColor: widget.style.marqueeBorderColor,
                   ),
                 ),
               ),
@@ -432,8 +501,11 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                                       widget.strings.selectAllButtonLabel,
                                     ),
                                     onPressed: () {
-                                      _controller.selectAll(
-                                        widget.ocrResult.lines.length,
+                                      _controller.setSelection(
+                                        prepared.map(
+                                          (_PreparedLine line) =>
+                                              line.sourceIndex,
+                                        ),
                                       );
                                       _notifySelectionChanged();
                                     },
@@ -509,75 +581,92 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
     );
   }
 
-  /// Checks whether [localPoint] lies inside any rotated [OcrTextLine] quadrilateral.
+  List<_PreparedLine> _prepareLines(OcrDisplayedImageSpace space) {
+    final List<OcrTextLine> source = widget.ocrResult.lines;
+    final List<_PreparedLine> prepared = <_PreparedLine>[];
+    // Junk is judged in corrected OCR space. Display size can be the raw
+    // EXIF bitmap, which would reject corners that are valid before mapping.
+    final double correctedWidth = widget.ocrResult.imageWidth.toDouble();
+    final double correctedHeight = widget.ocrResult.imageHeight.toDouble();
+    for (int i = 0; i < source.length; i++) {
+      final OcrTextLine line = source[i];
+      if (!OcrLiveTextGeometry.isDisplayable(
+        line,
+        imageWidth: correctedWidth,
+        imageHeight: correctedHeight,
+        minConfidence: widget.style.minConfidence,
+        minBoxScore: widget.style.minBoxScore,
+      )) {
+        continue;
+      }
+      final List<Offset> displayCorners = line.cornerPoints
+          .map(space.toDisplay)
+          .toList(growable: false);
+      final OcrTextLine sanitized = OcrLiveTextGeometry.sanitize(
+        line.copyWith(
+          cornerPoints: displayCorners,
+          boundingBox: OcrLiveTextGeometry.polygonBounds(displayCorners),
+        ),
+        axisSnapDegrees: widget.style.axisSnapDegrees,
+      );
+      if (!OcrLiveTextGeometry.isDisplayable(
+        sanitized,
+        imageWidth: space.imageWidth,
+        imageHeight: space.imageHeight,
+        minConfidence: widget.style.minConfidence,
+        minBoxScore: widget.style.minBoxScore,
+      )) {
+        continue;
+      }
+      prepared.add(_PreparedLine(sourceIndex: i, line: sanitized));
+    }
+    return prepared;
+  }
+
+  /// Checks whether [localPoint] lies inside a painted highlight quad.
   int? _hitTestLineIndex(
     Offset localPoint,
     OcrImageCoordinateTransform transform,
+    List<_PreparedLine> prepared,
   ) {
-    final Offset imagePoint = transform.localToImage(localPoint);
-    for (int i = widget.ocrResult.lines.length - 1; i >= 0; i--) {
-      final OcrTextLine line = widget.ocrResult.lines[i];
-      if (_isPointInPolygon(imagePoint, line.cornerPoints)) {
-        return i;
+    for (int i = prepared.length - 1; i >= 0; i--) {
+      final List<Offset> quad = OcrLiveTextGeometry.paintedQuad(
+        imageCorners: prepared[i].line.cornerPoints,
+        transform: transform,
+        outset: widget.style.highlightOutset,
+      );
+      if (OcrLiveTextGeometry.containsPoint(localPoint, quad)) {
+        return prepared[i].sourceIndex;
       }
     }
     return null;
   }
 
-  /// Finds all [OcrTextLine] indices whose transformed polygons intersect [localMarquee].
+  /// Finds source indices whose painted quads intersect [localMarquee].
   Set<int> _hitTestMarquee(
     Rect localMarquee,
     OcrImageCoordinateTransform transform,
+    List<_PreparedLine> prepared,
   ) {
     final Set<int> selected = <int>{};
-    for (int i = 0; i < widget.ocrResult.lines.length; i++) {
-      final OcrTextLine line = widget.ocrResult.lines[i];
-      final List<Offset> localCorners = line.cornerPoints
-          .map(transform.imageToLocal)
-          .toList(growable: false);
-      final Rect localBounds = _polygonBounds(localCorners);
-      if (localMarquee.overlaps(localBounds)) {
-        selected.add(i);
+    for (final _PreparedLine preparedLine in prepared) {
+      final List<Offset> quad = OcrLiveTextGeometry.paintedQuad(
+        imageCorners: preparedLine.line.cornerPoints,
+        transform: transform,
+        outset: widget.style.highlightOutset,
+      );
+      if (OcrLiveTextGeometry.quadIntersectsRect(quad, localMarquee)) {
+        selected.add(preparedLine.sourceIndex);
       }
     }
     return selected;
   }
+}
 
-  /// Ray-casting point-in-polygon algorithm for rotated 4-corner quadrilaterals.
-  static bool _isPointInPolygon(Offset point, List<Offset> polygon) {
-    if (polygon.length < 3) return false;
-    bool inside = false;
-    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      final double xi = polygon[i].dx;
-      final double yi = polygon[i].dy;
-      final double xj = polygon[j].dx;
-      final double yj = polygon[j].dy;
+/// A displayable line plus its index in [OcrResult.lines].
+class _PreparedLine {
+  const _PreparedLine({required this.sourceIndex, required this.line});
 
-      final bool intersect =
-          ((yi > point.dy) != (yj > point.dy)) &&
-          (point.dx <
-              (xj - xi) *
-                      (point.dy - yi) /
-                      ((yj - yi) == 0 ? 1e-7 : (yj - yi)) +
-                  xi);
-      if (intersect) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  }
-
-  static Rect _polygonBounds(List<Offset> pts) {
-    double minX = pts.first.dx;
-    double maxX = pts.first.dx;
-    double minY = pts.first.dy;
-    double maxY = pts.first.dy;
-    for (final Offset p in pts.skip(1)) {
-      if (p.dx < minX) minX = p.dx;
-      if (p.dx > maxX) maxX = p.dx;
-      if (p.dy < minY) minY = p.dy;
-      if (p.dy > maxY) maxY = p.dy;
-    }
-    return Rect.fromLTRB(minX, minY, maxX, maxY);
-  }
+  final int sourceIndex;
+  final OcrTextLine line;
 }

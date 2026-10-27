@@ -3,12 +3,17 @@ import 'package:flutter/rendering.dart';
 
 import '../models/ocr_text_line.dart';
 import 'ocr_image_coordinate_transform.dart';
+import 'ocr_live_text_geometry.dart';
 
 /// High-performance `CustomPainter` for `OcrLiveTextOverlay` driven directly by
 /// `repaint` listenables ([selectedIndicesListenable], [hoveredIndexListenable],
 /// [dragMarqueeListenable], and [highlightOpacityListenable]) so pointer hover,
 /// marquee dragging, and selection changes repaint ONLY the canvas layer without
 /// rebuilding the widget tree via `setState`.
+///
+/// Quads are outset by [highlightOutset] logical pixels so the stroke sits just
+/// outside the glyphs. [sourceIndices] maps a painted line back to the original
+/// `OcrResult.lines` index when junk rows have been filtered out of [lines].
 class OcrLiveTextPainter extends CustomPainter {
   OcrLiveTextPainter({
     required this.lines,
@@ -24,7 +29,13 @@ class OcrLiveTextPainter extends CustomPainter {
     required this.hoveredFillColor,
     required this.marqueeFillColor,
     required this.marqueeBorderColor,
-  }) : super(
+    required this.highlightOutset,
+    required this.sourceIndices,
+  }) : assert(
+         sourceIndices.length == lines.length,
+         'sourceIndices must match lines.',
+       ),
+       super(
          repaint: Listenable.merge(<Listenable>[
            selectedIndicesListenable,
            hoveredIndexListenable,
@@ -47,6 +58,14 @@ class OcrLiveTextPainter extends CustomPainter {
   final Color marqueeFillColor;
   final Color marqueeBorderColor;
 
+  /// Logical-pixel halo between the glyph box and the stroked highlight.
+  final double highlightOutset;
+
+  /// Original `OcrResult.lines` index for each entry in [lines].
+  final List<int> sourceIndices;
+
+  int _sourceIndex(int i) => sourceIndices[i];
+
   @override
   void paint(Canvas canvas, Size size) {
     final Set<int> selectedIndices = selectedIndicesListenable.value;
@@ -58,16 +77,20 @@ class OcrLiveTextPainter extends CustomPainter {
       final OcrTextLine line = lines[i];
       if (line.cornerPoints.length < 4) continue;
 
-      final bool isSelected = selectedIndices.contains(i);
-      final bool isHovered = hoveredIndex == i;
+      final int sourceIndex = _sourceIndex(i);
+      final bool isSelected = selectedIndices.contains(sourceIndex);
+      final bool isHovered = hoveredIndex == sourceIndex;
 
       if (!isSelected && !isHovered && highlightOpacity <= 0.01) {
         continue;
       }
 
-      final List<Offset> pts = line.cornerPoints
-          .map(transform.imageToLocal)
-          .toList(growable: false);
+      final List<Offset> pts = OcrLiveTextGeometry.paintedQuad(
+        imageCorners: line.cornerPoints,
+        transform: transform,
+        outset: highlightOutset,
+      );
+      if (pts.length < 4) continue;
 
       final Path polyPath = Path()
         ..moveTo(pts[0].dx, pts[0].dy)
@@ -89,14 +112,17 @@ class OcrLiveTextPainter extends CustomPainter {
 
       final Paint fillPaint = Paint()
         ..style = PaintingStyle.fill
+        ..isAntiAlias = true
         ..color = baseFill.withValues(
           alpha: (baseFill.a * effectiveOpacity).clamp(0.0, 1.0),
         );
 
       final Paint borderPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isSelected ? 2.2 : 1.3
+        ..strokeWidth = isSelected ? 2.0 : 1.25
         ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true
         ..color = baseBorder.withValues(
           alpha: (baseBorder.a * effectiveOpacity).clamp(0.0, 1.0),
         );
@@ -105,14 +131,16 @@ class OcrLiveTextPainter extends CustomPainter {
       canvas.drawPath(polyPath, borderPaint);
     }
 
-    // Draw interactive drag selection marquee rectangle if active
     if (dragMarqueeRect != null) {
       final Paint marqueeFill = Paint()
         ..style = PaintingStyle.fill
+        ..isAntiAlias = true
         ..color = marqueeFillColor;
       final Paint marqueeStroke = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
+        ..strokeWidth = 1.25
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
         ..color = marqueeBorderColor;
       canvas.drawRect(dragMarqueeRect, marqueeFill);
       canvas.drawRect(dragMarqueeRect, marqueeStroke);
@@ -122,11 +150,18 @@ class OcrLiveTextPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant OcrLiveTextPainter oldDelegate) {
     return oldDelegate.lines != lines ||
+        oldDelegate.sourceIndices != sourceIndices ||
+        oldDelegate.highlightOutset != highlightOutset ||
         oldDelegate.transform.scaleX != transform.scaleX ||
         oldDelegate.transform.scaleY != transform.scaleY ||
         oldDelegate.transform.offsetX != transform.offsetX ||
         oldDelegate.transform.offsetY != transform.offsetY ||
         oldDelegate.highlightFillColor != highlightFillColor ||
-        oldDelegate.selectedFillColor != selectedFillColor;
+        oldDelegate.highlightBorderColor != highlightBorderColor ||
+        oldDelegate.selectedFillColor != selectedFillColor ||
+        oldDelegate.selectedBorderColor != selectedBorderColor ||
+        oldDelegate.hoveredFillColor != hoveredFillColor ||
+        oldDelegate.marqueeFillColor != marqueeFillColor ||
+        oldDelegate.marqueeBorderColor != marqueeBorderColor;
   }
 }
