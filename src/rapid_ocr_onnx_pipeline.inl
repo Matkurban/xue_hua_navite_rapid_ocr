@@ -473,7 +473,7 @@ class OnnxRapidOcr {
 
   static std::vector<std::string> SiblingCandidates() {
     std::vector<std::string> names;
-    std::string directory;
+    std::string module_path;
 #if defined(_WIN32)
     HMODULE module = nullptr;
     if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -482,26 +482,88 @@ class OnnxRapidOcr {
                            &module)) {
       char path[MAX_PATH];
       const DWORD n = GetModuleFileNameA(module, path, MAX_PATH);
-      if (n > 0 && n < MAX_PATH) directory = path;
+      if (n > 0 && n < MAX_PATH) module_path = path;
     }
 #else
     Dl_info info{};
     if (dladdr(reinterpret_cast<const void*>(&OnnxRapidOcr::SiblingCandidates), &info) &&
         info.dli_fname != nullptr) {
-      directory = info.dli_fname;
+      module_path = info.dli_fname;
     }
 #endif
-    const auto slash = directory.find_last_of("/\\");
+    const auto slash = module_path.find_last_of("/\\");
     if (slash == std::string::npos) return names;
-    directory.resize(slash + 1);
-    names.push_back(directory + "libonnxruntime.so.1");
-    names.push_back(directory + "libonnxruntime.so.1.20.1");
-    names.push_back(directory + "libonnxruntime.so");
-    names.push_back(directory + "onnxruntime.dll");
-    names.push_back(directory + "libonnxruntime.dylib");
-    names.push_back(directory + "libonnxruntime.1.dylib");
+    std::string directory = module_path.substr(0, slash + 1);
+    auto push_dir = [&](const std::string& dir) {
+      const char* leaves[] = {
+          "libonnxruntime.so.1",
+          "libonnxruntime.so.1.20.1",
+          "libonnxruntime.so",
+          "onnxruntime.dll",
+          "libonnxruntime.dylib",
+          "libonnxruntime.1.dylib",
+          "libonnxruntime.1.20.1.dylib",
+      };
+      for (const char* leaf : leaves) {
+        names.push_back(dir + leaf);
+        // SwiftPM puts copied resources under Versions/A/Resources/.
+        names.push_back(dir + "Resources/" + leaf);
+      }
+    };
+    // Walk up from the plugin binary so Flutter macOS layouts resolve:
+    // App.app/Contents/Frameworks/plugin.framework/Versions/A/plugin
+    // -> Frameworks/libonnxruntime.dylib (CocoaPods vendored_libraries)
+    // -> Resources/<plugin>.bundle/Contents/Resources/libonnxruntime.dylib (SwiftPM).
+    auto push_spm_bundles = [&](const std::string& contents_dir) {
+      const std::string resources = contents_dir + "Resources/";
+      names.push_back(resources + "libonnxruntime.dylib");
+      names.push_back(resources +
+                      "xue_hua_navite_rapid_ocr_xue_hua_navite_rapid_ocr.bundle/"
+                      "Contents/Resources/libonnxruntime.dylib");
+#if !defined(_WIN32)
+      DIR* dir = opendir(resources.c_str());
+      if (dir != nullptr) {
+        while (dirent* ent = readdir(dir)) {
+          const char* name = ent->d_name;
+          if (name == nullptr || name[0] == '.') continue;
+          const std::string entry(name);
+          if (entry.size() < 7 || entry.compare(entry.size() - 7, 7, ".bundle") != 0) {
+            continue;
+          }
+          names.push_back(resources + entry +
+                          "/Contents/Resources/libonnxruntime.dylib");
+          names.push_back(resources + entry +
+                          "/Contents/Resources/libonnxruntime.1.dylib");
+        }
+        closedir(dir);
+      }
+#endif
+    };
+    for (int depth = 0; depth < 8; ++depth) {
+      push_dir(directory);
+      if (directory.size() >= 12 &&
+          directory.compare(directory.size() - 12, 12, "/Frameworks/") == 0) {
+        // App.app/Contents/Frameworks/ — copy target of embed_macos_ort_into_app.sh
+        push_dir(directory);
+      }
+      if (directory.size() >= 9 &&
+          directory.compare(directory.size() - 9, 9, "/Contents/") == 0) {
+        push_spm_bundles(directory);
+      }
+      // Also detect Contents without relying solely on trailing-slash compare.
+      const auto contents_at = directory.rfind("/Contents/");
+      if (contents_at != std::string::npos) {
+        push_spm_bundles(directory.substr(0, contents_at + 10));
+      }
+      if (directory.size() <= 1) break;
+      std::string parent = directory.substr(0, directory.size() - 1);
+      const auto parent_slash = parent.find_last_of("/\\");
+      if (parent_slash == std::string::npos) break;
+      directory = parent.substr(0, parent_slash + 1);
+    }
     return names;
   }
+
 
   OrtSession* CreateSession(const std::vector<uint8_t>& model, int execution_provider) {
     OrtSessionOptions* options = nullptr;

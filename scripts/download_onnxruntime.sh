@@ -90,3 +90,18 @@ chmod +x "$dest/$out_name"
 rm -rf "$extract"
 echo "OK $dest/$out_name"
 ls -lh "$dest/$out_name"
+
+# Apple Flutter hosts build the plugin via SwiftPM; copy beside the C++ sources
+# so Package.swift can `.copy` the dylib into the framework Resources.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  spm_vendor="$ROOT/macos/xue_hua_navite_rapid_ocr/Sources/xue_hua_navite_rapid_ocr/Vendor"
+  mkdir -p "$spm_vendor" "$ROOT/macos/Libraries"
+  cp -L "$dest/$out_name" "$spm_vendor/libonnxruntime.dylib"
+  cp -L "$dest/$out_name" "$ROOT/macos/Libraries/libonnxruntime.dylib"
+  install_name_tool -id @rpath/libonnxruntime.dylib "$spm_vendor/libonnxruntime.dylib" 2>/dev/null || true
+  install_name_tool -id @rpath/libonnxruntime.dylib "$ROOT/macos/Libraries/libonnxruntime.dylib" 2>/dev/null || true
+  codesign --force --sign - "$spm_vendor/libonnxruntime.dylib" 2>/dev/null || true
+  codesign --force --sign - "$ROOT/macos/Libraries/libonnxruntime.dylib" 2>/dev/null || true
+  echo "Prepared SPM Vendor + CocoaPods Libraries copies"
+fi
+

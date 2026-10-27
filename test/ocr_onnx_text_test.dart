@@ -13,9 +13,15 @@ void main() {
   test(
     'recognizeBytes returns RapidOCR characters, not a placeholder',
     () async {
+      final bool hasNativeEngine = File(
+            'build/native/libxue_hua_navite_rapid_ocr.so',
+          ).existsSync() ||
+          File('build/native/libxue_hua_navite_rapid_ocr.dylib').existsSync() ||
+          File('build/native/xue_hua_navite_rapid_ocr.dll').existsSync();
+      final bool hasOrt = File('build/native/libonnxruntime.so.1').existsSync() ||
+          File('build/native/libonnxruntime.dylib').existsSync() ||
+          File('build/native/onnxruntime.dll').existsSync();
       final List<File> required = <File>[
-        File('build/native/libxue_hua_navite_rapid_ocr.so'),
-        File('build/native/libonnxruntime.so.1'),
         File('assets/models/ch_PP-OCRv4_det_mobile.onnx'),
         File('assets/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx'),
         File('assets/models/ch_PP-OCRv4_rec_mobile.onnx'),
@@ -23,7 +29,9 @@ void main() {
         File('test/fixtures/rapidocr_hello_zh.png'),
         File('example/ocr_overlay_complaint.png'),
       ];
-      if (required.any((File file) => !file.existsSync())) {
+      if (!hasNativeEngine ||
+          !hasOrt ||
+          required.any((File file) => !file.existsSync())) {
         markTestSkipped(
           'ONNX models, ONNX Runtime, or build/native are absent. '
           'Run scripts/download_models.sh, scripts/download_onnxruntime.sh, '

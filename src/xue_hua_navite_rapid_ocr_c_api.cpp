@@ -19,6 +19,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <dirent.h>
 #endif
 
 #include "third_party/onnxruntime_c_api.h"

@@ -20,11 +20,29 @@ OcrPlatformEngine createPlatformOcrEngine() => OcrEngineFfi();
 
 const String _kLibName = 'xue_hua_navite_rapid_ocr';
 
+bool _libraryExportsOcrInit(ffi.DynamicLibrary library) {
+  try {
+    library.lookup('xue_hua_rapid_ocr_init');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+ffi.DynamicLibrary? _tryOpenPath(String path) {
+  try {
+    final ffi.DynamicLibrary library = ffi.DynamicLibrary.open(path);
+    if (_libraryExportsOcrInit(library)) return library;
+  } catch (_) {
+    // Try the next candidate.
+  }
+  return null;
+}
+
 ffi.DynamicLibrary? _tryOpenDynamicLibrary() {
-  final ffi.DynamicLibrary? bundled = _tryOpenBundledLibrary();
-  if (bundled != null) return bundled;
-  // Host `flutter test` does not copy the Flutter-built plugin into the
-  // process search path. A CMake build in build/native is the ONNX engine.
+  // Prefer an explicit/dev build first. On macOS, DynamicLibrary.process()
+  // succeeds for the test runner even when this plugin is not linked, which
+  // previously shadowed build/native and made Apple hosts look "empty".
   const List<String> devNames = <String>[
     'lib$_kLibName.so',
     '$_kLibName.dll',
@@ -38,12 +56,12 @@ ffi.DynamicLibrary? _tryOpenDynamicLibrary() {
   for (final String path in explicit) {
     final File file = File(path);
     if (!file.existsSync()) continue;
-    try {
-      return ffi.DynamicLibrary.open(file.absolute.path);
-    } catch (_) {
-      // Try the next candidate.
-    }
+    final ffi.DynamicLibrary? opened = _tryOpenPath(file.absolute.path);
+    if (opened != null) return opened;
   }
+
+  final ffi.DynamicLibrary? bundled = _tryOpenBundledLibrary();
+  if (bundled != null) return bundled;
   return null;
 }
 
@@ -56,23 +74,22 @@ ffi.DynamicLibrary? _tryOpenBundledLibrary() {
         'xue-hua-navite-rapid-ocr.framework/xue-hua-navite-rapid-ocr',
       ];
       for (final String path in candidates) {
-        try {
-          return ffi.DynamicLibrary.open(path);
-        } catch (_) {
-          // Try next candidate.
-        }
+        final ffi.DynamicLibrary? opened = _tryOpenPath(path);
+        if (opened != null) return opened;
       }
       try {
-        return ffi.DynamicLibrary.process();
+        final ffi.DynamicLibrary process = ffi.DynamicLibrary.process();
+        if (_libraryExportsOcrInit(process)) return process;
       } catch (_) {
         return null;
       }
+      return null;
     }
     if (Platform.isAndroid || Platform.isLinux) {
-      return ffi.DynamicLibrary.open('lib$_kLibName.so');
+      return _tryOpenPath('lib$_kLibName.so');
     }
     if (Platform.isWindows) {
-      return ffi.DynamicLibrary.open('$_kLibName.dll');
+      return _tryOpenPath('$_kLibName.dll');
     }
   } catch (_) {
     // Allow graceful fallback inside the Worker Isolate during host VM unit tests.

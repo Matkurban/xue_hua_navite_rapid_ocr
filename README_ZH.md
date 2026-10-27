@@ -44,7 +44,7 @@ dependencies:
 
 ## 多语言（80+ 语种）集成完整指南 (`OcrLanguage` & `OcrModelConfig`)
 
-> 模型文件名与下载地址对齐 **RapidOCR v3.10.0**（`ModelScope resolve/v3.10.0`，见 `scripts/download_models.sh` 与 [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)）。原生识别通过 ONNX Runtime 1.20.1 加载这些权重（先运行 `scripts/download_onnxruntime.sh`，再运行 `scripts/build_native.sh`）。Linux 与 Windows 会在 `third_party/onnxruntime/` 中存在对应动态库时一并打包。
+> 模型文件名与下载地址对齐 **RapidOCR v3.10.0**（`ModelScope resolve/v3.10.0`，见 `scripts/download_models.sh` 与 [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)）。原生识别通过 ONNX Runtime 1.20.1 加载这些权重（先运行 `scripts/download_onnxruntime.sh`，再运行 `scripts/build_native.sh`）。Linux 与 Windows 会在 `third_party/onnxruntime/` 中存在对应动态库时一并打包。macOS 上 Flutter 通过 SwiftPM 构建本插件：`scripts/download_onnxruntime.sh` 会把 dylib 拷进 SPM 的 `Vendor/`，由 `Package.swift` 打进 framework 的 Resources（CocoaPods 的 `Libraries/` 仍兼容旧 pod 安装）。沙盒宿主还需 `com.apple.security.cs.disable-library-validation`（example 已加），RapidOCR 才能 `dlopen` 该库。
 
 `xue_hua_navite_rapid_ocr` 支持通过切换 PP-OCRv4 / PP-OCRv5 的识别模型（`rec.onnx`）与对应字符字典（`keys.txt`）实现 80+ 语言离线识别。
 

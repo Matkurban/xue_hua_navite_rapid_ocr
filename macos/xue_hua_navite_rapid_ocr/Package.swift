@@ -1,6 +1,9 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
+// ORT must already sit at Sources/.../Vendor/libonnxruntime.dylib
+// (scripts/download_onnxruntime.sh). Do not gate on #filePath — Flutter
+// evaluates this manifest from a resolved copy where that check is false.
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",
     platforms: [
@@ -18,6 +21,10 @@ let package = Package(
         .target(
             name: "xue_hua_navite_rapid_ocr",
             path: "Sources/xue_hua_navite_rapid_ocr",
+            sources: ["xue_hua_navite_rapid_ocr_c_api.cpp"],
+            resources: [
+                .copy("Vendor/libonnxruntime.dylib"),
+            ],
             publicHeadersPath: "include",
             cxxSettings: [
                 .headerSearchPath("include"),
@@ -25,6 +32,11 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedLibrary("c++"),
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path",
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/Resources",
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks",
+                ], .when(platforms: [.macOS])),
             ]
         ),
     ],
