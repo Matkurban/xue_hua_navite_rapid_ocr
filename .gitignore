@@ -39,3 +39,7 @@ assets/models/*.onnx
 # src/third_party/onnxruntime_c_api.h stays tracked.
 /third_party/onnxruntime*
 /third_party/.onnxruntime-download/
+
+# macOS CocoaPods-embedded ORT (copied by podspec prepare_command)
+/macos/Libraries/*.dylib
+/ios/Libraries/*.dylib

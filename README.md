@@ -127,7 +127,7 @@ dependencies:
 
 ## Multilingual OCR Integration Guide (80+ Languages)
 
-> Model filenames and download URLs are aligned with **RapidOCR v3.10.0** (`ModelScope resolve/v3.10.0`, see `scripts/download_models.sh` and [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)). Native recognition loads those weights through ONNX Runtime 1.20.1 (`scripts/download_onnxruntime.sh`, then `scripts/build_native.sh`). Linux and Windows bundle `libonnxruntime` / `onnxruntime.dll` when that download is present under `third_party/onnxruntime/`.
+> Model filenames and download URLs are aligned with **RapidOCR v3.10.0** (`ModelScope resolve/v3.10.0`, see `scripts/download_models.sh` and [default_models.yaml](https://github.com/RapidAI/RapidOCR/blob/v3.10.0/python/rapidocr/default_models.yaml)). Native recognition loads those weights through ONNX Runtime 1.20.1 (`scripts/download_onnxruntime.sh`, then `scripts/build_native.sh`). Linux and Windows bundle `libonnxruntime` / `onnxruntime.dll` when that download is present under `third_party/onnxruntime/`. macOS CocoaPods embeds `Libraries/libonnxruntime.dylib` via the plugin podspec `prepare_command` (same download). Sandboxed host apps need `com.apple.security.cs.disable-library-validation` (the example entitlements already set it) so RapidOCR can `dlopen` that dylib.
 
 `xue_hua_navite_rapid_ocr` supports 80+ languages by pairing a universal DBNet text detector (`det.onnx`), the 180° orientation classifier (`cls.onnx`), and a language-specific CrnnNet/SVTR recognition model (`rec.onnx`) + character dictionary (`keys.txt`).
 
