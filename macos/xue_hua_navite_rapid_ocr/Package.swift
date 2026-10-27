@@ -1,26 +1,9 @@
 // swift-tools-version: 5.9
 import PackageDescription
-import Foundation
 
-let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-let ortDylib = packageRoot
-    .appendingPathComponent("Sources/xue_hua_navite_rapid_ocr/Vendor/libonnxruntime.dylib")
-let hasOrt = FileManager.default.fileExists(atPath: ortDylib.path)
-
-var resources: [Resource] = []
-var linkerSettings: [LinkerSetting] = [
-    .linkedLibrary("c++"),
-]
-if hasOrt {
-    // Copied into framework Versions/A/Resources/ for RapidOCR dlopen.
-    resources.append(.copy("Vendor/libonnxruntime.dylib"))
-    linkerSettings.append(.unsafeFlags([
-        "-Xlinker", "-rpath", "-Xlinker", "@loader_path",
-        "-Xlinker", "-rpath", "-Xlinker", "@loader_path/Resources",
-        "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks",
-    ], .when(platforms: [.macOS])))
-}
-
+// ORT must already sit at Sources/.../Vendor/libonnxruntime.dylib
+// (scripts/download_onnxruntime.sh). Do not gate on #filePath — Flutter
+// evaluates this manifest from a resolved copy where that check is false.
 let package = Package(
     name: "xue_hua_navite_rapid_ocr",
     platforms: [
@@ -38,15 +21,23 @@ let package = Package(
         .target(
             name: "xue_hua_navite_rapid_ocr",
             path: "Sources/xue_hua_navite_rapid_ocr",
-            // Only compile the forwarder; Vendor holds the ORT dylib resource.
             sources: ["xue_hua_navite_rapid_ocr_c_api.cpp"],
-            resources: resources,
+            resources: [
+                .copy("Vendor/libonnxruntime.dylib"),
+            ],
             publicHeadersPath: "include",
             cxxSettings: [
                 .headerSearchPath("include"),
                 .define("DART_SHARED_LIB"),
             ],
-            linkerSettings: linkerSettings
+            linkerSettings: [
+                .linkedLibrary("c++"),
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path",
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/Resources",
+                    "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks",
+                ], .when(platforms: [.macOS])),
+            ]
         ),
     ],
     cxxLanguageStandard: .cxx17
