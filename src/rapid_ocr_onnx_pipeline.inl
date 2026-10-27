@@ -442,6 +442,13 @@ class OnnxRapidOcr {
     using OrtGetApiBaseFn = const OrtApiBase*(ORT_API_CALL*)(void);
     OrtGetApiBaseFn get_base = nullptr;
     library_owned_ = false;
+    // Vendored header is ORT 1.31.1 (API 31). iOS links CocoaPods 1.30.0
+    // (API 30) — GetApi(31) returns null against that xcframework.
+#if defined(XUE_HUA_ORT_LINKED)
+    static constexpr uint32_t kRequestedOrtApiVersion = 30u;
+#else
+    static constexpr uint32_t kRequestedOrtApiVersion = ORT_API_VERSION;
+#endif
 #if defined(_WIN32)
     std::vector<std::string> names = SiblingCandidates();
     if (const char* env = std::getenv("ONNXRUNTIME_LIB")) names.insert(names.begin(), env);
@@ -461,7 +468,7 @@ class OnnxRapidOcr {
     get_base = &OrtGetApiBase;
     if (get_base != nullptr) {
       const OrtApiBase* linked = get_base();
-      api_ = linked != nullptr ? linked->GetApi(ORT_API_VERSION) : nullptr;
+      api_ = linked != nullptr ? linked->GetApi(kRequestedOrtApiVersion) : nullptr;
       if (api_ != nullptr) return true;
       get_base = nullptr;
       api_ = nullptr;
@@ -489,7 +496,7 @@ class OnnxRapidOcr {
 #endif
     if (get_base == nullptr) return false;
     const OrtApiBase* base = get_base();
-    api_ = base != nullptr ? base->GetApi(ORT_API_VERSION) : nullptr;
+    api_ = base != nullptr ? base->GetApi(kRequestedOrtApiVersion) : nullptr;
     return api_ != nullptr;
   }
 
@@ -519,12 +526,12 @@ class OnnxRapidOcr {
     auto push_dir = [&](const std::string& dir) {
       const char* leaves[] = {
           "libonnxruntime.so.1",
-          "libonnxruntime.so.1.20.1",
+          "libonnxruntime.so.1.31.1",
           "libonnxruntime.so",
           "onnxruntime.dll",
           "libonnxruntime.dylib",
           "libonnxruntime.1.dylib",
-          "libonnxruntime.1.20.1.dylib",
+          "libonnxruntime.1.31.1.dylib",
       };
       for (const char* leaf : leaves) {
         names.push_back(dir + leaf);

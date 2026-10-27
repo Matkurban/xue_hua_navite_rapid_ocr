@@ -1,4 +1,9 @@
-/// Developer-machine runtime assets for RapidOCR v3.10.0 + ONNX Runtime 1.20.x.
+/// Developer-machine runtime assets for RapidOCR v3.10.0 + ONNX Runtime.
+///
+/// Desktop / host ORT is **1.31.1** (`ORT_API_VERSION` 31). iOS uses the newest
+/// CocoaPods `pod-archive-onnxruntime-c` that still publishes (**1.30.0**,
+/// `ORT_API_VERSION` 30) — GitHub ORT releases omit iOS, and 1.31.x pod
+/// archives are not available yet.
 ///
 /// Consumed by `dart run xue_hua_navite_rapid_ocr:fetch_runtime` (and optionally
 /// by CocoaPods / CMake prepare steps). Large binaries stay gitignored.
@@ -8,11 +13,13 @@ library;
 const String kRapidOcrModelScopeBase =
     'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0';
 
-/// Desktop / Android host ORT version this plugin dlopens.
-const String kOnnxRuntimeVersion = '1.20.1';
+/// Desktop / Android / macOS (arm64) / Windows host ORT version this plugin dlopens.
+const String kOnnxRuntimeVersion = '1.31.1';
 
-/// iOS CocoaPods ORT archive (same ORT_API_VERSION 20 as 1.20.1 desktop).
-const String kOnnxRuntimeIosVersion = '1.20.0';
+/// iOS CocoaPods ORT archive (newest available; ORT_API_VERSION 30).
+///
+/// Linked iOS builds must call `GetApi(30)`, not the vendored header's 31.
+const String kOnnxRuntimeIosVersion = '1.30.0';
 
 /// One downloadable `.onnx` weight (no character dictionaries).
 class OcrOnnxModelAsset {
@@ -142,7 +149,7 @@ const OcrOrtHostArtifact kOrtLinuxX64 = OcrOrtHostArtifact(
   assetName: 'onnxruntime-linux-x64-$kOnnxRuntimeVersion.tgz',
   packedLibRelativePath: 'lib/libonnxruntime.so.$kOnnxRuntimeVersion',
   outFileName: 'libonnxruntime.so.1',
-  sha256: '67db4dc1561f1e3fd42e619575c82c601ef89849afc7ea85a003abbac1a1a105',
+  sha256: 'c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9',
 );
 
 const OcrOrtHostArtifact kOrtMacosArm64 = OcrOrtHostArtifact(
@@ -150,8 +157,10 @@ const OcrOrtHostArtifact kOrtMacosArm64 = OcrOrtHostArtifact(
   assetName: 'onnxruntime-osx-arm64-$kOnnxRuntimeVersion.tgz',
   packedLibRelativePath: 'lib/libonnxruntime.$kOnnxRuntimeVersion.dylib',
   outFileName: 'libonnxruntime.dylib',
+  sha256: '2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f',
 );
 
+/// ORT 1.31.x GitHub releases no longer ship `osx-x86_64`. Kept for error messaging only.
 const OcrOrtHostArtifact kOrtMacosX64 = OcrOrtHostArtifact(
   platformKey: 'macos-x64',
   assetName: 'onnxruntime-osx-x86_64-$kOnnxRuntimeVersion.tgz',
@@ -164,7 +173,12 @@ const OcrOrtHostArtifact kOrtWinX64 = OcrOrtHostArtifact(
   assetName: 'onnxruntime-win-x64-$kOnnxRuntimeVersion.zip',
   packedLibRelativePath: 'lib/onnxruntime.dll',
   outFileName: 'onnxruntime.dll',
+  sha256: '5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c',
 );
 
 const String kOrtIosPodArchiveUrl =
     'https://download.onnxruntime.ai/pod-archive-onnxruntime-c-$kOnnxRuntimeIosVersion.zip';
+
+/// SHA-256 of the iOS CocoaPods ORT 1.30.0 archive.
+const String kOrtIosPodArchiveSha256 =
+    'e6f1670c14406fd9f082bb400ab197a9b0a9646058ca6366e440642e2b54a2ea';

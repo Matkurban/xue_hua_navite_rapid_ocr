@@ -27,7 +27,7 @@ class OcrModelConfig {
     this.enableWebModelCache = true,
     this.webCacheName = 'xue_hua_rapid_ocr_onnx_cache_v1',
     this.webOrtScriptUrl =
-        'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js',
+        'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.min.js',
   });
 
   /// Convenience factory that populates default **model** asset paths for a

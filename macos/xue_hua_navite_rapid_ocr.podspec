@@ -17,7 +17,7 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
   s.preserve_paths = 'Libraries/**/*'
   s.vendored_libraries = 'Libraries/libonnxruntime.dylib'
 
-  # Embed ONNX Runtime 1.20.1 for RapidOCR dlopen.
+  # Embed ONNX Runtime 1.31.1 for RapidOCR dlopen.
   # Developers: `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`
   s.prepare_command = <<-CMD
     set -e

@@ -20,7 +20,8 @@ Check out xue_hua_navite_rapid_ocr — a full-featured 6-platform native & Web o
 
   # Embed ONNX Runtime (static xcframework) for RapidOCR.
   # Developers: `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`
-  # Official GitHub releases omit iOS; CocoaPods trunk ships 1.20.0 which shares ORT_API_VERSION 20.
+  # Official GitHub releases omit iOS; newest pod-archive is 1.30.0 (ORT_API_VERSION 30).
+  # Desktop vendors 1.31.1 (API 31); linked iOS must call GetApi(30).
   s.prepare_command = <<-CMD
     set -e
     ROOT="$(cd .. && pwd)"

@@ -252,7 +252,15 @@ OcrOrtHostArtifact? _hostOrtArtifact() {
   }
   if (os == 'macos') {
     if (arch == 'arm64') return kOrtMacosArm64;
-    if (arch == 'x86_64') return kOrtMacosX64;
+    if (arch == 'x86_64') {
+      // ORT 1.31.x GitHub releases dropped osx-x86_64 (404).
+      stderr.writeln(
+        'ONNX Runtime $kOnnxRuntimeVersion has no osx-x86_64 GitHub asset. '
+        'Use an arm64 Mac, or place libonnxruntime.dylib under '
+        'third_party/onnxruntime/macos-x64/ manually.',
+      );
+      return null;
+    }
   }
   if (os == 'windows') {
     return kOrtWinX64;
@@ -309,16 +317,26 @@ Future<void> _fetchIosXcframework(
   final Directory iosDest =
       Directory(p.join(root.path, 'third_party', 'onnxruntime', 'ios'));
   final Directory xc = Directory(p.join(iosDest.path, 'onnxruntime.xcframework'));
+  final File versionStamp =
+      File(p.join(iosDest.path, '.ort-ios-version'));
+  final bool versionOk = versionStamp.existsSync() &&
+      versionStamp.readAsStringSync().trim() == kOnnxRuntimeIosVersion;
   final File archive = File(
     p.join(work.path, 'pod-archive-onnxruntime-c-$kOnnxRuntimeIosVersion.zip'),
   );
-  if (!xc.existsSync()) {
+  if (!xc.existsSync() || !versionOk) {
+    if (xc.existsSync()) {
+      stdout.writeln(
+        'Refreshing iOS ORT xcframework -> $kOnnxRuntimeIosVersion',
+      );
+      xc.deleteSync(recursive: true);
+    }
     await iosDest.create(recursive: true);
     await _downloadFile(
       client: client,
       url: kOrtIosPodArchiveUrl,
       dest: archive,
-      expectSha256: null,
+      expectSha256: kOrtIosPodArchiveSha256,
     );
     final Directory extract = Directory(p.join(work.path, 'extract-ios'));
     if (extract.existsSync()) {
@@ -338,9 +356,12 @@ Future<void> _fetchIosXcframework(
     }
     await _copyDirectory(found, xc);
     extract.deleteSync(recursive: true);
-    stdout.writeln('OK ${xc.path}');
+    versionStamp.writeAsStringSync('$kOnnxRuntimeIosVersion\n');
+    stdout.writeln('OK ${xc.path} (iOS ORT $kOnnxRuntimeIosVersion)');
   } else {
-    stdout.writeln('Using existing ${xc.path}');
+    stdout.writeln(
+      'Using existing ${xc.path} (iOS ORT $kOnnxRuntimeIosVersion)',
+    );
   }
 
   final Directory frameworks =
