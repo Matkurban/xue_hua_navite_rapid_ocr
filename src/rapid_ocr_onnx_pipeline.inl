@@ -491,7 +491,7 @@ class OnnxRapidOcr {
       module_path = info.dli_fname;
     }
 #endif
-    const auto slash = module_path.find_last_of("/\");
+    const auto slash = module_path.find_last_of("/\\");
     if (slash == std::string::npos) return names;
     std::string directory = module_path.substr(0, slash + 1);
     auto push_dir = [&](const std::string& dir) {
@@ -510,7 +510,7 @@ class OnnxRapidOcr {
       push_dir(directory);
       if (directory.size() <= 1) break;
       std::string parent = directory.substr(0, directory.size() - 1);
-      const auto parent_slash = parent.find_last_of("/\");
+      const auto parent_slash = parent.find_last_of("/\\");
       if (parent_slash == std::string::npos) break;
       directory = parent.substr(0, parent_slash + 1);
     }
