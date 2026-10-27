@@ -41,7 +41,7 @@ assets/models/ppocr_keys_v1.txt
 assets/models/ppocrv5_dict.txt
 
 # ONNX Runtime binaries (dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort).
-# src/third_party/onnxruntime_c_api.h stays tracked.
+# src/third_party/onnxruntime_*.h stays tracked.
 /third_party/onnxruntime*
 /third_party/.onnxruntime-download/
 
