@@ -76,7 +76,10 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
 
       await _reinitializeEngine();
       await _runRecognizeBytes();
-      debugPrint('[OCR_DEMO] bootstrap OK status=$_statusMessage lines=${_ocrResult?.lines.length}');
+      debugPrint(
+        '[OCR_DEMO] bootstrap OK status=$_statusMessage '
+        'lines=${_ocrResult?.lines.length} text=${_ocrResult?.fullText}',
+      );
     } catch (e) {
       debugPrint('[OCR_DEMO] bootstrap FAIL: $e');
       if (mounted) {
@@ -118,6 +121,17 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
             'Engine Ready (${_selectedLanguage.modelPrefix}, EP: ${_selectedProvider.wireName})';
       });
     }
+  }
+
+  String _recognizedPreview(OcrResult result) {
+    final String compact = result.fullText
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (compact.isEmpty) return '';
+    final String clipped = compact.length <= 240
+        ? compact
+        : '${compact.substring(0, 240)}...';
+    return ' Text: $clipped';
   }
 
   OcrRecognizeOptions get _currentOptions => OcrRecognizeOptions(
@@ -179,7 +193,9 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
           _ocrResult = result;
           _statusMessage =
               'Recognized "${file.name}" in ${result.totalTimeMs.toStringAsFixed(1)} ms '
-              '(${result.lines.length} lines, ${result.blocks.length} blocks, EXIF: ${result.exifOrientation})';
+              '(${result.lines.length} lines, ${result.blocks.length} blocks, EXIF: ${result.exifOrientation})'
+              '${_recognizedPreview(result)}';
+          debugPrint('[OCR_DEMO] recognizeBytes text=${result.fullText}');
         });
       }
     } on FileOperationsException catch (e) {
@@ -220,7 +236,9 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
           _ocrResult = res;
           _statusMessage =
               'recognizeBytes completed in ${res.totalTimeMs.toStringAsFixed(1)} ms '
-              '(${res.lines.length} lines, ${res.blocks.length} blocks, EP: ${res.executionProviderUsed})';
+              '(${res.lines.length} lines, ${res.blocks.length} blocks, EP: ${res.executionProviderUsed})'
+              '${_recognizedPreview(res)}';
+          debugPrint('[OCR_DEMO] recognizeBytes text=${res.fullText}');
         });
       }
     } catch (e) {
@@ -258,7 +276,9 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
           _ocrResult = res;
           _statusMessage =
               'recognizeRawPixels completed in ${res.totalTimeMs.toStringAsFixed(1)} ms '
-              '(${res.lines.length} lines, ${res.blocks.length} blocks)';
+              '(${res.lines.length} lines, ${res.blocks.length} blocks)'
+              '${_recognizedPreview(res)}';
+          debugPrint('[OCR_DEMO] recognizeRawPixels text=${res.fullText}');
         });
       }
     } catch (e) {

@@ -63,6 +63,17 @@ class ParagraphBlocksTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        Text('Recognized text', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SelectableText(
+              result.fullText.isEmpty ? '(no text)' : result.fullText,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Text(
           'Clustered Paragraph Blocks (${result.blocks.length})',
           style: Theme.of(context).textTheme.titleMedium,

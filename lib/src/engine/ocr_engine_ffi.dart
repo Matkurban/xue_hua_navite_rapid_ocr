@@ -21,6 +21,33 @@ OcrPlatformEngine createPlatformOcrEngine() => OcrEngineFfi();
 const String _kLibName = 'xue_hua_navite_rapid_ocr';
 
 ffi.DynamicLibrary? _tryOpenDynamicLibrary() {
+  final ffi.DynamicLibrary? bundled = _tryOpenBundledLibrary();
+  if (bundled != null) return bundled;
+  // Host `flutter test` does not copy the Flutter-built plugin into the
+  // process search path. A CMake build in build/native is the ONNX engine.
+  const List<String> devNames = <String>[
+    'lib$_kLibName.so',
+    '$_kLibName.dll',
+    'lib$_kLibName.dylib',
+  ];
+  final List<String> explicit = <String>[
+    if ((Platform.environment['XUE_HUA_RAPID_OCR_LIB'] ?? '').isNotEmpty)
+      Platform.environment['XUE_HUA_RAPID_OCR_LIB']!,
+    for (final String name in devNames) 'build/native/$name',
+  ];
+  for (final String path in explicit) {
+    final File file = File(path);
+    if (!file.existsSync()) continue;
+    try {
+      return ffi.DynamicLibrary.open(file.absolute.path);
+    } catch (_) {
+      // Try the next candidate.
+    }
+  }
+  return null;
+}
+
+ffi.DynamicLibrary? _tryOpenBundledLibrary() {
   try {
     if (Platform.isMacOS || Platform.isIOS) {
       // SPM/CocoaPods may emit either underscore or hyphenated framework names.
@@ -591,7 +618,6 @@ void _ocrWorkerIsolateEntryPoint(SendPort mainSendPort) {
               width: cmd.width,
               height: cmd.height,
               stride: cmd.rowStride > 0 ? cmd.rowStride : cmd.width * 4,
-              bgra: cmd.pixelFormat == OcrPixelFormat.bgra8888.nativeValue,
               options: cmd.options,
               providerName: activeProviderName,
             );
@@ -767,38 +793,26 @@ OcrResult _marshalAndFreeNativeResult(
 
 /// Fallback used when the native library is not loaded (host VM unit tests).
 ///
-/// Raw pixels are localized with [OcrInkLineLocalizer]. Encoded bytes that
-/// this isolate cannot decode keep an axis-aligned demo sheet — never the
-/// old sheared canned quads.
+/// Decoded pixels are not transcribed here: [OcrInkLineLocalizer] is a
+/// geometry helper, and placeholder glyphs are not OCR text. Encoded bytes
+/// this isolate cannot decode keep an axis-aligned demo sheet.
 OcrResult _runPureDartFallbackPipeline({
   required Uint8List? rgba,
   required int width,
   required int height,
   int? stride,
-  bool bgra = false,
   required OcrRecognizeOptions options,
   required String providerName,
 }) {
   List<OcrTextLine> rawLines = const <OcrTextLine>[];
   final int rowStride = stride ?? width * 4;
-  if (rgba != null &&
+  final bool hasPixels =
+      rgba != null &&
       width > 0 &&
       height > 0 &&
-      rgba.length >= rowStride * height) {
-    final List<OcrLocalizedInkLine> localized = OcrInkLineLocalizer.localize(
-      rgba: rgba,
-      width: width,
-      height: height,
-      stride: rowStride,
-      bgra: bgra,
-      options: options,
-    );
-    rawLines = OcrInkLineLocalizer.toTextLines(
-      lines: localized,
-      imageWidth: width,
-      imageHeight: height,
-      options: options,
-    );
+      rgba.length >= rowStride * height;
+  if (hasPixels) {
+    rawLines = const <OcrTextLine>[];
   } else {
     rawLines = OcrInkLineLocalizer.undecodedDemoLines(
       width: width,

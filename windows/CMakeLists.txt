@@ -15,9 +15,14 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DI
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
-set(xue_hua_navite_rapid_ocr_bundled_libraries
-  # Defined in ../src/CMakeLists.txt.
-  # This can be changed to accommodate different builds.
+set(_xue_hua_bundled_libraries
   $<TARGET_FILE:xue_hua_navite_rapid_ocr>
+)
+set(_xue_hua_ort_dll "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/onnxruntime/win-x64/onnxruntime.dll")
+if(EXISTS "${_xue_hua_ort_dll}")
+  list(APPEND _xue_hua_bundled_libraries "${_xue_hua_ort_dll}")
+endif()
+set(xue_hua_navite_rapid_ocr_bundled_libraries
+  ${_xue_hua_bundled_libraries}
   PARENT_SCOPE
 )

@@ -142,4 +142,5 @@ do
 done
 
 echo "Done. Models in $DIR (RapidOCR v3.10.0)"
+echo "Native det/cls/rec also needs ONNX Runtime 1.20.1: scripts/download_onnxruntime.sh"
 ls -lh

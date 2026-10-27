@@ -24,6 +24,10 @@ target_include_directories(xue_hua_navite_rapid_ocr PUBLIC
 
 target_compile_definitions(xue_hua_navite_rapid_ocr PUBLIC DART_SHARED_LIB)
 
+if(UNIX)
+  target_link_libraries(xue_hua_navite_rapid_ocr PRIVATE ${CMAKE_DL_LIBS})
+endif()
+
 # Optional external ONNX Runtime / RapidOcrOnnx linking when ONNXRUNTIME_ROOTDIR is provided
 if (DEFINED ONNXRUNTIME_ROOTDIR AND EXISTS "${ONNXRUNTIME_ROOTDIR}")
   target_include_directories(xue_hua_navite_rapid_ocr PRIVATE "${ONNXRUNTIME_ROOTDIR}/include")
