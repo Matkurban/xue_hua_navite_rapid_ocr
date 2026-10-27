@@ -541,9 +541,19 @@ class OnnxRapidOcr {
     };
     for (int depth = 0; depth < 8; ++depth) {
       push_dir(directory);
+      if (directory.size() >= 12 &&
+          directory.compare(directory.size() - 12, 12, "/Frameworks/") == 0) {
+        // App.app/Contents/Frameworks/ — copy target of embed_macos_ort_into_app.sh
+        push_dir(directory);
+      }
       if (directory.size() >= 9 &&
           directory.compare(directory.size() - 9, 9, "/Contents/") == 0) {
         push_spm_bundles(directory);
+      }
+      // Also detect Contents without relying solely on trailing-slash compare.
+      const auto contents_at = directory.rfind("/Contents/");
+      if (contents_at != std::string::npos) {
+        push_spm_bundles(directory.substr(0, contents_at + 10));
       }
       if (directory.size() <= 1) break;
       std::string parent = directory.substr(0, directory.size() - 1);
