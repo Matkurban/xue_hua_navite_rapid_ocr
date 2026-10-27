@@ -61,6 +61,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
   }
 
   Future<void> _bootstrapDemo() async {
+    if (!mounted) return;
     setState(() {
       _isBusy = true;
       _statusMessage =
@@ -74,6 +75,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
       _sampleRawRgbaBytes = generated.rawRgbaBytes;
       _pickedFileName = 'synthetic_${_selectedLanguage.name}.png';
 
+      if (!mounted) return;
       await _reinitializeEngine();
       await _runRecognizeBytes();
       debugPrint(
@@ -97,6 +99,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
   }
 
   Future<void> _reinitializeEngine() async {
+    if (!mounted) return;
     setState(() {
       _isBusy = true;
       _statusMessage =
@@ -148,6 +151,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
   /// (`withData: true` so bytes are available for both `OcrLiveTextOverlay` and `recognizeBytes`/`recognizeFile`)
   /// and immediately runs OCR recognition.
   Future<void> _pickImageAndRecognize() async {
+    if (!mounted) return;
     setState(() {
       _isBusy = true;
       _statusMessage =
@@ -222,6 +226,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
 
   Future<void> _runRecognizeBytes() async {
     if (_activeImageBytes == null) return;
+    if (!mounted) return;
     setState(() {
       _isBusy = true;
       _statusMessage = 'Running recognizeBytes (Zero-Copy Buffer)...';
@@ -258,6 +263,7 @@ class _OcrDemoHomePageState extends State<OcrDemoHomePage> {
 
   Future<void> _runRecognizeRawPixels() async {
     if (_sampleRawRgbaBytes == null) return;
+    if (!mounted) return;
     setState(() {
       _isBusy = true;
       _statusMessage = 'Running recognizeRawPixels (RGBA8888 960×640)...';

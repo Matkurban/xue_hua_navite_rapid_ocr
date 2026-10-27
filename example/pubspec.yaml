@@ -16,6 +16,8 @@ dependencies:
   cupertino_icons: ^2.0.0
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
@@ -42,4 +44,6 @@ flutter:
     - assets/models/cyrillic_dict.txt
     - assets/models/arabic_PP-OCRv4_rec_mobile.onnx
     - assets/models/arabic_dict.txt
+    - assets/test/rapidocr_hello_zh.png
+    - assets/test/ocr_overlay_complaint.png
 

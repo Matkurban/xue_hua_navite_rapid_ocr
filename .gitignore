@@ -45,3 +45,6 @@ assets/models/*.onnx
 /ios/Libraries/*.dylib
 
 /macos/xue_hua_navite_rapid_ocr/Sources/xue_hua_navite_rapid_ocr/Vendor/*.dylib
+
+/ios/Frameworks/onnxruntime.xcframework/
+/ios/xue_hua_navite_rapid_ocr/OnnxRuntime/onnxruntime.xcframework/
