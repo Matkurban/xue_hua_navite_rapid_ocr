@@ -495,13 +495,20 @@ class OnnxRapidOcr {
     if (slash == std::string::npos) return names;
     std::string directory = module_path.substr(0, slash + 1);
     auto push_dir = [&](const std::string& dir) {
-      names.push_back(dir + "libonnxruntime.so.1");
-      names.push_back(dir + "libonnxruntime.so.1.20.1");
-      names.push_back(dir + "libonnxruntime.so");
-      names.push_back(dir + "onnxruntime.dll");
-      names.push_back(dir + "libonnxruntime.dylib");
-      names.push_back(dir + "libonnxruntime.1.dylib");
-      names.push_back(dir + "libonnxruntime.1.20.1.dylib");
+      const char* leaves[] = {
+          "libonnxruntime.so.1",
+          "libonnxruntime.so.1.20.1",
+          "libonnxruntime.so",
+          "onnxruntime.dll",
+          "libonnxruntime.dylib",
+          "libonnxruntime.1.dylib",
+          "libonnxruntime.1.20.1.dylib",
+      };
+      for (const char* leaf : leaves) {
+        names.push_back(dir + leaf);
+        // SwiftPM puts copied resources under Versions/A/Resources/.
+        names.push_back(dir + "Resources/" + leaf);
+      }
     };
     // Walk up from the plugin binary so Flutter macOS layouts resolve:
     // App.app/Contents/Frameworks/plugin.framework/Versions/A/plugin

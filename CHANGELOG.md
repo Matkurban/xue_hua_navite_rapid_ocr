@@ -7,7 +7,7 @@
 
 ## 1.0.0
 
-* macOS now embeds ONNX Runtime (`podspec` `vendored_libraries` + `prepare_command`) and example entitlements allow loading it under App Sandbox. FFI library discovery no longer treats empty `DynamicLibrary.process()` as success on Apple hosts, so `flutter test` / `build/native` can load the real engine.
+* macOS now embeds ONNX Runtime (SwiftPM `Package.swift` resource + CocoaPods `vendored_libraries`) and example entitlements allow loading it under App Sandbox. FFI library discovery no longer treats empty `DynamicLibrary.process()` as success on Apple hosts, so `flutter test` / `build/native` can load the real engine.
 * Initial production release of `xue_hua_navite_rapid_ocr` across all 6 platforms (Android, iOS, macOS, Windows, Linux, Web).
 * Added `XueHuaNaviteRapidOcr` unified engine with conditional compilation (`dart.library.ffi` vs `dart.library.js_interop`).
 * Added Native C++17 `RapidOcrOnnx` pipeline (`DBNet` + `AngleNet` + `CrnnNet`/`SVTR`) with zero-copy FFI Worker Isolate, automatic EXIF orientation correction, and multi-format pixel buffers (`RGBA8888`, `BGRA8888`, `NV21`).
