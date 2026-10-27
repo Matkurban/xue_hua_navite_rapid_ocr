@@ -1,5 +1,7 @@
 ## 1.0.0
 
+* Example macOS App Sandbox entitlements now include `com.apple.security.network.client` so runtime dictionary downloads (ModelScope HTTPS) work; docs note the same requirement for host apps.
+
 * Bumped host ONNX Runtime to **1.31.1** (Linux / macOS arm64 / Windows / `onnxruntime-web`) and iOS CocoaPods archive to **1.30.0** (newest `pod-archive-onnxruntime-c` available; 1.31.x iOS zips 404). Vendored `onnxruntime_c_api.h` is API 31; linked iOS (`XUE_HUA_ORT_LINKED`) requests `GetApi(30)`. ORT 1.31.x no longer ships `osx-x86_64`.
 * **Breaking (pre-pub.dev):** removed all `scripts/*.sh`. Developer runtime deps (ONNX Runtime + `.onnx` weights) auto-fetch via `dart run xue_hua_navite_rapid_ocr:fetch_runtime` (SHA-256 checked). Character dictionaries are no longer mandatory plugin assets — apps use `OcrDictionaryCatalog` / `OcrDictionaryStore` so end users can pick language packs at runtime (`keysPathOrUrl` / `keysUtf8Text`). `OcrLanguage.defaultKeysAssetPath` renamed to `defaultKeysFileName`.
 * iOS embeds ONNX Runtime via static `onnxruntime.xcframework` (SwiftPM `binaryTarget` + CocoaPods `vendored_frameworks`, prepared by `dart run xue_hua_navite_rapid_ocr:fetch_runtime --ort`). Linked `OrtGetApiBase` path (`XUE_HUA_ORT_LINKED`) so FFI recognition works on device/simulator the same way as macOS.
