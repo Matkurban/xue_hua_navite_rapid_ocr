@@ -3,37 +3,18 @@ import 'dart:ui' show Offset, Rect, Size;
 import 'package:flutter/painting.dart'
     show Alignment, BoxFit, FittedSizes, applyBoxFit;
 
-/// Maps OCR image pixels onto the rectangle where [paintImage] draws them.
+/// Maps OCR image pixels onto the rectangle where `paintImage` draws them.
 ///
-/// The mapping follows Flutter's `paintImage`: [applyBoxFit] runs in logical
-/// pixels (`pixelSize / imageScale`), the source crop is converted back to
-/// pixels, and both the source and destination rects are inscribed with
-/// [alignment]. [BoxFit.cover], [BoxFit.fitWidth], and [BoxFit.fitHeight]
-/// therefore crop the same pixels the [Image] widget crops, and letterboxing
-/// for [BoxFit.contain] uses the same origin.
+/// The mapping is only [applyBoxFit] plus [Alignment] plus the image scale:
+/// [applyBoxFit] runs in logical pixels (`pixelSize / imageScale`), the source
+/// crop is converted back to pixels, and both rects are inscribed with
+/// [alignment]. [scaleX], [scaleY], [offsetX], and [offsetY] are derived from
+/// those rects. They are not a second coordinate system.
 class OcrImageCoordinateTransform {
-  const OcrImageCoordinateTransform({
-    required this.scaleX,
-    required this.scaleY,
-    required this.offsetX,
-    required this.offsetY,
+  const OcrImageCoordinateTransform._({
     required this.sourceRect,
     required this.destinationRect,
   });
-
-  /// Horizontal scale from image pixels to local logical pixels.
-  ///
-  /// Together with [offsetX] this is `destination.left + (x - source.left) * scaleX`.
-  final double scaleX;
-
-  /// Vertical scale from image pixels to local logical pixels.
-  final double scaleY;
-
-  /// Local X of image X = 0 after the source-crop origin is applied.
-  final double offsetX;
-
-  /// Local Y of image Y = 0 after the source-crop origin is applied.
-  final double offsetY;
 
   /// Pixel rect of the image that is visible (the [applyBoxFit] source).
   final Rect sourceRect;
@@ -41,13 +22,27 @@ class OcrImageCoordinateTransform {
   /// Local rect where those pixels are painted.
   final Rect destinationRect;
 
+  /// Horizontal scale from image pixels to local logical pixels.
+  double get scaleX =>
+      sourceRect.width == 0 ? 1 : destinationRect.width / sourceRect.width;
+
+  /// Vertical scale from image pixels to local logical pixels.
+  double get scaleY =>
+      sourceRect.height == 0 ? 1 : destinationRect.height / sourceRect.height;
+
+  /// Local X of image X = 0 after the source-crop origin is applied.
+  double get offsetX => destinationRect.left - sourceRect.left * scaleX;
+
+  /// Local Y of image Y = 0 after the source-crop origin is applied.
+  double get offsetY => destinationRect.top - sourceRect.top * scaleY;
+
   factory OcrImageCoordinateTransform.compute({
     required Size containerSize,
     required double imageWidth,
     required double imageHeight,
     required BoxFit fit,
-    Alignment alignment = Alignment.center,
-    double imageScale = 1.0,
+    required Alignment alignment,
+    required double imageScale,
   }) {
     final double pixelW = imageWidth.isFinite ? imageWidth : 0;
     final double pixelH = imageHeight.isFinite ? imageHeight : 0;
@@ -58,11 +53,7 @@ class OcrImageCoordinateTransform {
         pixelH <= 0 ||
         containerSize.width <= 0 ||
         containerSize.height <= 0) {
-      return OcrImageCoordinateTransform(
-        scaleX: 1,
-        scaleY: 1,
-        offsetX: 0,
-        offsetY: 0,
+      return OcrImageCoordinateTransform._(
         sourceRect: Rect.fromLTWH(0, 0, pixelW, pixelH),
         destinationRect: Rect.fromLTWH(
           0,
@@ -85,19 +76,7 @@ class OcrImageCoordinateTransform {
       fitted.destination,
       Offset.zero & containerSize,
     );
-
-    final double scaleX = sourceRect.width > 0
-        ? destinationRect.width / sourceRect.width
-        : 1.0;
-    final double scaleY = sourceRect.height > 0
-        ? destinationRect.height / sourceRect.height
-        : 1.0;
-
-    return OcrImageCoordinateTransform(
-      scaleX: scaleX,
-      scaleY: scaleY,
-      offsetX: destinationRect.left - sourceRect.left * scaleX,
-      offsetY: destinationRect.top - sourceRect.top * scaleY,
+    return OcrImageCoordinateTransform._(
       sourceRect: sourceRect,
       destinationRect: destinationRect,
     );

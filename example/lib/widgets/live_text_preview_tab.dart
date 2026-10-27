@@ -47,8 +47,10 @@ class LiveTextPreviewTab extends StatelessWidget {
                   ocrResult: result,
                   controller: controller,
                   strings: liveTextStrings,
-                  fit: BoxFit.contain,
-                  alignment: Alignment.center,
+                  layout: const OcrLiveTextLayout(
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                  ),
                   onSelectionChanged: onSelectionChanged,
                   customActions: <OcrLiveTextCustomAction>[
                     OcrLiveTextCustomAction(

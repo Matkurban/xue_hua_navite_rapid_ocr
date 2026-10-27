@@ -20,8 +20,8 @@ class OcrLiveTextGeometry {
     OcrTextLine line, {
     required double imageWidth,
     required double imageHeight,
-    double minConfidence = 0.05,
-    double minBoxScore = 0.05,
+    required double minConfidence,
+    required double minBoxScore,
   }) {
     if (line.text.trim().isEmpty) return false;
     if (!line.confidence.isFinite || line.confidence < minConfidence) {
@@ -46,7 +46,7 @@ class OcrLiveTextGeometry {
   /// their oriented quad.
   static OcrTextLine sanitize(
     OcrTextLine line, {
-    double axisSnapDegrees = 4.0,
+    required double axisSnapDegrees,
   }) {
     final List<Offset> ordered = orderCorners(line.cornerPoints);
     final Rect box = polygonBounds(ordered);
@@ -167,7 +167,7 @@ class OcrLiveTextGeometry {
   static List<Offset> paintedQuad({
     required List<Offset> imageCorners,
     required OcrImageCoordinateTransform transform,
-    double outset = 0,
+    required double outset,
   }) {
     final List<Offset> local = imageCorners
         .map(transform.imageToLocal)

@@ -18,6 +18,8 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.contain,
+            alignment: Alignment.center,
+            imageScale: 1,
           );
       expect(contain.imageToLocal(Offset.zero), const Offset(0, 25));
       expect(
@@ -33,6 +35,7 @@ void main() {
             imageHeight: 100,
             fit: BoxFit.contain,
             alignment: Alignment.topLeft,
+            imageScale: 1,
           );
       expect(containTopLeft.imageToLocal(Offset.zero), Offset.zero);
       expect(
@@ -46,6 +49,8 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.contain,
+            alignment: Alignment.center,
+            imageScale: 1,
           );
       expect(
         wideContain.imageToLocal(const Offset(100, 50)),
@@ -69,6 +74,8 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.cover,
+            alignment: Alignment.center,
+            imageScale: 1,
           );
       expect(cover.imageToLocal(const Offset(50, 0)), Offset.zero);
       expect(
@@ -86,6 +93,8 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.fill,
+            alignment: Alignment.center,
+            imageScale: 1,
           );
       expect(fill.imageToLocal(const Offset(200, 100)), const Offset(100, 80));
       expect(fill.imageToLocal(const Offset(100, 50)), const Offset(50, 40));
@@ -98,6 +107,7 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.none,
+            alignment: Alignment.center,
             imageScale: 2,
           );
       expect(none.imageToLocal(Offset.zero), const Offset(0, 25));
@@ -174,14 +184,34 @@ void main() {
       );
       expect(scaled.toDisplay(const Offset(10, 20)), const Offset(20, 40));
 
-      final OcrDisplayedImageSpace fallback = OcrDisplayedImageSpace.resolve(
+      final OcrDisplayedImageSpace stretched = OcrDisplayedImageSpace.resolve(
         correctedWidth: 200,
         correctedHeight: 100,
         exifOrientation: 1,
         decodedPixelSize: const Size(300, 100),
       );
-      expect(fallback.imageWidth, 200);
-      expect(fallback.toDisplay(const Offset(10, 20)), const Offset(10, 20));
+      expect(stretched.imageWidth, 300);
+      expect(stretched.imageHeight, 100);
+      expect(stretched.toDisplay(const Offset(10, 20)), const Offset(15, 20));
+
+      final OcrDisplayedImageSpace tiny = OcrDisplayedImageSpace.resolve(
+        correctedWidth: 200,
+        correctedHeight: 100,
+        exifOrientation: 1,
+        decodedPixelSize: const Size(1, 1),
+      );
+      expect(tiny.imageWidth, 1);
+      expect(tiny.imageHeight, 1);
+      expect(tiny.toDisplay(const Offset(100, 50)), const Offset(0.5, 0.5));
+
+      final OcrDisplayedImageSpace pending = OcrDisplayedImageSpace.resolve(
+        correctedWidth: 200,
+        correctedHeight: 100,
+        exifOrientation: 6,
+        decodedPixelSize: null,
+      );
+      expect(pending.imageWidth, 200);
+      expect(pending.toDisplay(const Offset(10, 20)), const Offset(10, 20));
     });
   });
 
@@ -215,6 +245,8 @@ void main() {
           line(text: '   '),
           imageWidth: 200,
           imageHeight: 100,
+          minConfidence: 0.05,
+          minBoxScore: 0.05,
         ),
         isFalse,
       );
@@ -223,6 +255,8 @@ void main() {
           line(confidence: 0.01),
           imageWidth: 200,
           imageHeight: 100,
+          minConfidence: 0.05,
+          minBoxScore: 0.05,
         ),
         isFalse,
       );
@@ -231,6 +265,8 @@ void main() {
           line(boxScore: 0),
           imageWidth: 200,
           imageHeight: 100,
+          minConfidence: 0.05,
+          minBoxScore: 0.05,
         ),
         isFalse,
       );
@@ -246,6 +282,8 @@ void main() {
           ),
           imageWidth: 200,
           imageHeight: 100,
+          minConfidence: 0.05,
+          minBoxScore: 0.05,
         ),
         isFalse,
       );
@@ -254,6 +292,8 @@ void main() {
           line(),
           imageWidth: 200,
           imageHeight: 100,
+          minConfidence: 0.05,
+          minBoxScore: 0.05,
         ),
         isTrue,
       );
@@ -269,7 +309,10 @@ void main() {
           Offset(10, 40 - rise / 2),
         ],
       );
-      final OcrTextLine snapped = OcrLiveTextGeometry.sanitize(sheared);
+      final OcrTextLine snapped = OcrLiveTextGeometry.sanitize(
+        sheared,
+        axisSnapDegrees: 4,
+      );
       expect(snapped.angle, 0);
       expect(
         snapped.cornerPoints[0].dy,
@@ -291,6 +334,7 @@ void main() {
       final OcrTextLine kept = OcrLiveTextGeometry.sanitize(
         line(corners: <Offset>[rotated[2], rotated[0], rotated[3], rotated[1]])
             .copyWith(angle: 12),
+        axisSnapDegrees: 4,
       );
       expect(kept.angle, 12);
       expect(
@@ -311,6 +355,8 @@ void main() {
             imageWidth: 200,
             imageHeight: 100,
             fit: BoxFit.fill,
+            alignment: Alignment.center,
+            imageScale: 1,
           );
       final List<Offset> quad = OcrLiveTextGeometry.paintedQuad(
         imageCorners: line().cornerPoints,
@@ -475,8 +521,10 @@ void main() {
                 image: MemoryImage(png),
                 ocrResult: result,
                 controller: controller,
-                fit: BoxFit.contain,
-                alignment: Alignment.center,
+                layout: const OcrLiveTextLayout(
+                  fit: BoxFit.contain,
+                  alignment: Alignment.center,
+                ),
               ),
             ),
           ),

@@ -273,6 +273,7 @@ class _DocumentScannerViewState extends State<DocumentScannerView> {
               image: MemoryImage(_pickedFile!.bytes!),
               ocrResult: _ocrResult!,
               controller: _liveTextController,
+              layout: const OcrLiveTextLayout.contain(),
               // Pass localized strings via OcrLiveTextStrings
               strings: OcrLiveTextStrings(
                 copyButtonLabel: 'Copy',

@@ -29,9 +29,13 @@ class OcrLiveTextPainter extends CustomPainter {
     required this.hoveredFillColor,
     required this.marqueeFillColor,
     required this.marqueeBorderColor,
-    this.highlightOutset = 1.25,
-    this.sourceIndices,
-  }) : super(
+    required this.highlightOutset,
+    required this.sourceIndices,
+  }) : assert(
+         sourceIndices.length == lines.length,
+         'sourceIndices must match lines.',
+       ),
+       super(
          repaint: Listenable.merge(<Listenable>[
            selectedIndicesListenable,
            hoveredIndexListenable,
@@ -58,13 +62,9 @@ class OcrLiveTextPainter extends CustomPainter {
   final double highlightOutset;
 
   /// Original `OcrResult.lines` index for each entry in [lines].
-  final List<int>? sourceIndices;
+  final List<int> sourceIndices;
 
-  int _sourceIndex(int i) {
-    final List<int>? keys = sourceIndices;
-    if (keys != null && i >= 0 && i < keys.length) return keys[i];
-    return i;
-  }
+  int _sourceIndex(int i) => sourceIndices[i];
 
   @override
   void paint(Canvas canvas, Size size) {

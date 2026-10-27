@@ -188,6 +188,7 @@ class _OcrScannerDemoState extends State<OcrScannerDemo> {
               image: MemoryImage(_pickedFile!.bytes!),
               ocrResult: _ocrResult!,
               controller: _liveTextController,
+              layout: const OcrLiveTextLayout.contain(),
               // 使用 OcrLiveTextStrings.zhCN() 或自定义所有国际化文案
               strings: OcrLiveTextStrings(
                 copyButtonLabel: '复制选中',

@@ -8,16 +8,20 @@ import 'ocr_image_coordinate_transform.dart';
 import 'ocr_live_text_controller.dart';
 import 'ocr_live_text_custom_action.dart';
 import 'ocr_live_text_geometry.dart';
+import 'ocr_live_text_layout.dart';
 import 'ocr_live_text_painter.dart';
 import 'ocr_live_text_strings.dart';
+import 'ocr_live_text_style.dart';
 
 export 'ocr_exif_coordinate_mapper.dart';
 export 'ocr_image_coordinate_transform.dart';
 export 'ocr_live_text_controller.dart';
 export 'ocr_live_text_custom_action.dart';
 export 'ocr_live_text_geometry.dart';
+export 'ocr_live_text_layout.dart';
 export 'ocr_live_text_painter.dart';
 export 'ocr_live_text_strings.dart';
+export 'ocr_live_text_style.dart';
 
 /// Interactive 6-platform "Live Text" overlay widget (`OcrLiveTextOverlay`).
 ///
@@ -36,24 +40,12 @@ class OcrLiveTextOverlay extends StatefulWidget {
     required this.ocrResult,
     this.controller,
     this.strings = const OcrLiveTextStrings(),
-    this.fit = BoxFit.contain,
-    this.alignment = Alignment.center,
-    this.filterQuality = FilterQuality.medium,
+    this.layout = const OcrLiveTextLayout.contain(),
+    this.style = const OcrLiveTextStyle(),
     this.initialShowHighlights = true,
     this.showFloatingToolbar = true,
     this.showToggleHighlightsButton = true,
     this.copyOnSingleTap = false,
-    this.highlightFillColor = const Color(0x282196F3),
-    this.highlightBorderColor = const Color(0x992196F3),
-    this.selectedFillColor = const Color(0x4D1976D2),
-    this.selectedBorderColor = const Color(0xFF1565C0),
-    this.hoveredFillColor = const Color(0x3842A5F5),
-    this.marqueeFillColor = const Color(0x261E88E5),
-    this.marqueeBorderColor = const Color(0xCC1E88E5),
-    this.highlightOutset = 1.25,
-    this.minHighlightConfidence = 0.05,
-    this.minHighlightBoxScore = 0.05,
-    this.axisSnapDegrees = 4.0,
     this.onSelectionChanged,
     this.onTextCopied,
     this.customActions = const <OcrLiveTextCustomAction>[],
@@ -71,17 +63,11 @@ class OcrLiveTextOverlay extends StatefulWidget {
   /// Customizable localization strings for all buttons, tooltips, and SnackBar messages.
   final OcrLiveTextStrings strings;
 
-  /// How the image and OCR coordinate space should be inscribed into the layout box.
-  final BoxFit fit;
+  /// Fit, alignment, and filter quality shared by the [Image] and the highlights.
+  final OcrLiveTextLayout layout;
 
-  /// Alignment shared by the [Image] and the highlight transform.
-  ///
-  /// Defaults to [Alignment.center], which is what [Image] uses when alignment
-  /// is omitted. Letterboxing and cover-crops stay in lockstep with the pixels.
-  final Alignment alignment;
-
-  /// Filter quality used when the bitmap is scaled into the layout box.
-  final FilterQuality filterQuality;
+  /// Colors, outset, score floors, and the upright-quad snap.
+  final OcrLiveTextStyle style;
 
   /// Whether highlight boxes are initially visible when [controller] is not provided.
   final bool initialShowHighlights;
@@ -94,40 +80,6 @@ class OcrLiveTextOverlay extends StatefulWidget {
 
   /// If `true`, tapping a single text box immediately copies its text to the system clipboard.
   final bool copyOnSingleTap;
-
-  /// Unselected text box fill color.
-  final Color highlightFillColor;
-
-  /// Unselected text box border color.
-  final Color highlightBorderColor;
-
-  /// Selected text box fill color.
-  final Color selectedFillColor;
-
-  /// Selected text box border color.
-  final Color selectedBorderColor;
-
-  /// Hovered text box fill color on Desktop & Web.
-  final Color hoveredFillColor;
-
-  /// Drag selection rectangle/lasso fill color.
-  final Color marqueeFillColor;
-
-  /// Drag selection rectangle/lasso border color.
-  final Color marqueeBorderColor;
-
-  /// Logical pixels the highlight stroke sits outside the glyph quad.
-  final double highlightOutset;
-
-  /// Lines below this recognition confidence are not drawn or hit-tested.
-  final double minHighlightConfidence;
-
-  /// Lines below this detection score are not drawn or hit-tested.
-  final double minHighlightBoxScore;
-
-  /// Top and bottom edges within this many degrees of horizontal are snapped
-  /// to an axis-aligned box so upright UI text does not draw as a shear.
-  final double axisSnapDegrees;
 
   /// Callback fired whenever the selected lines change.
   final void Function(String selectedText, List<OcrTextLine> selectedLines)?
@@ -344,8 +296,8 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
               containerSize: containerSize,
               imageWidth: displaySpace.imageWidth,
               imageHeight: displaySpace.imageHeight,
-              fit: widget.fit,
-              alignment: widget.alignment,
+              fit: widget.layout.fit,
+              alignment: widget.layout.alignment,
               imageScale: _decodedImageScale,
             );
         final List<_PreparedLine> prepared = _prepareLines(displaySpace);
@@ -356,9 +308,9 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
             // 1. Underlying Image (never rebuilt on hover/selection/drag)
             Image(
               image: widget.image,
-              fit: widget.fit,
-              alignment: widget.alignment,
-              filterQuality: widget.filterQuality,
+              fit: widget.layout.fit,
+              alignment: widget.layout.alignment,
+              filterQuality: widget.layout.filterQuality,
               gaplessPlayback: true,
               width: containerSize.width,
               height: containerSize.height,
@@ -460,20 +412,20 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
                     sourceIndices: prepared
                         .map((_PreparedLine line) => line.sourceIndex)
                         .toList(growable: false),
-                    highlightOutset: widget.highlightOutset,
+                    highlightOutset: widget.style.highlightOutset,
                     transform: transform,
                     selectedIndicesListenable:
                         _controller.selectedIndicesListenable,
                     hoveredIndexListenable: _hoveredLineIndexNotifier,
                     highlightOpacityListenable: _fadeController,
                     dragMarqueeListenable: _dragMarqueeNotifier,
-                    highlightFillColor: widget.highlightFillColor,
-                    highlightBorderColor: widget.highlightBorderColor,
-                    selectedFillColor: widget.selectedFillColor,
-                    selectedBorderColor: widget.selectedBorderColor,
-                    hoveredFillColor: widget.hoveredFillColor,
-                    marqueeFillColor: widget.marqueeFillColor,
-                    marqueeBorderColor: widget.marqueeBorderColor,
+                    highlightFillColor: widget.style.highlightFillColor,
+                    highlightBorderColor: widget.style.highlightBorderColor,
+                    selectedFillColor: widget.style.selectedFillColor,
+                    selectedBorderColor: widget.style.selectedBorderColor,
+                    hoveredFillColor: widget.style.hoveredFillColor,
+                    marqueeFillColor: widget.style.marqueeFillColor,
+                    marqueeBorderColor: widget.style.marqueeBorderColor,
                   ),
                 ),
               ),
@@ -642,8 +594,8 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
         line,
         imageWidth: correctedWidth,
         imageHeight: correctedHeight,
-        minConfidence: widget.minHighlightConfidence,
-        minBoxScore: widget.minHighlightBoxScore,
+        minConfidence: widget.style.minConfidence,
+        minBoxScore: widget.style.minBoxScore,
       )) {
         continue;
       }
@@ -655,14 +607,14 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
           cornerPoints: displayCorners,
           boundingBox: OcrLiveTextGeometry.polygonBounds(displayCorners),
         ),
-        axisSnapDegrees: widget.axisSnapDegrees,
+        axisSnapDegrees: widget.style.axisSnapDegrees,
       );
       if (!OcrLiveTextGeometry.isDisplayable(
         sanitized,
         imageWidth: space.imageWidth,
         imageHeight: space.imageHeight,
-        minConfidence: widget.minHighlightConfidence,
-        minBoxScore: widget.minHighlightBoxScore,
+        minConfidence: widget.style.minConfidence,
+        minBoxScore: widget.style.minBoxScore,
       )) {
         continue;
       }
@@ -681,7 +633,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
       final List<Offset> quad = OcrLiveTextGeometry.paintedQuad(
         imageCorners: prepared[i].line.cornerPoints,
         transform: transform,
-        outset: widget.highlightOutset,
+        outset: widget.style.highlightOutset,
       );
       if (OcrLiveTextGeometry.containsPoint(localPoint, quad)) {
         return prepared[i].sourceIndex;
@@ -701,7 +653,7 @@ class _OcrLiveTextOverlayState extends State<OcrLiveTextOverlay>
       final List<Offset> quad = OcrLiveTextGeometry.paintedQuad(
         imageCorners: preparedLine.line.cornerPoints,
         transform: transform,
-        outset: widget.highlightOutset,
+        outset: widget.style.highlightOutset,
       );
       if (OcrLiveTextGeometry.quadIntersectsRect(quad, localMarquee)) {
         selected.add(preparedLine.sourceIndex);

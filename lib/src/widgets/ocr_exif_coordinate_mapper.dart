@@ -92,6 +92,15 @@ class OcrExifCoordinateMapper {
 
 /// Pixel space of the bitmap [Image] is painting, plus a map from corrected
 /// OCR corners into that space.
+///
+/// One policy, used for every frame:
+/// * Before the image stream emits, corners stay in corrected OCR pixels.
+/// * When the decoded bitmap still has the pre-orientation size (tags 2–8),
+///   corners are inverse-mapped with [OcrExifCoordinateMapper].
+/// * Otherwise each axis is scaled from corrected pixels into the decoded
+///   bitmap, including a non-uniform stretch. The overlay then applies
+///   `BoxFit` to that decoded size. It does not keep painting in OCR pixels
+///   when the codec size disagrees.
 class OcrDisplayedImageSpace {
   const OcrDisplayedImageSpace({
     required this.imageWidth,
@@ -116,8 +125,8 @@ class OcrDisplayedImageSpace {
     final Size corrected = Size(cw, ch);
 
     if (decodedPixelSize == null ||
-        decodedPixelSize.width <= 1 ||
-        decodedPixelSize.height <= 1) {
+        decodedPixelSize.width <= 0 ||
+        decodedPixelSize.height <= 0) {
       return OcrDisplayedImageSpace(
         imageWidth: cw,
         imageHeight: ch,
@@ -125,16 +134,16 @@ class OcrDisplayedImageSpace {
       );
     }
 
-    if (_nearSize(decodedPixelSize, corrected)) {
-      return _scaled(from: corrected, to: decodedPixelSize);
-    }
-
     final Size raw = OcrExifCoordinateMapper.rawSize(
       correctedWidth: correctedWidth,
       correctedHeight: correctedHeight,
       orientation: exifOrientation,
     );
-    if (exifOrientation > 1 && _nearSize(decodedPixelSize, raw)) {
+    final bool decodedIsRaw =
+        exifOrientation > 1 &&
+        _nearSize(decodedPixelSize, raw) &&
+        !_nearSize(decodedPixelSize, corrected);
+    if (decodedIsRaw) {
       return OcrDisplayedImageSpace(
         imageWidth: decodedPixelSize.width,
         imageHeight: decodedPixelSize.height,
@@ -147,18 +156,7 @@ class OcrDisplayedImageSpace {
       );
     }
 
-    final double sx = decodedPixelSize.width / cw;
-    final double sy = decodedPixelSize.height / ch;
-    final double maxScale = sx > sy ? sx : sy;
-    if (sx > 0 && sy > 0 && (sx - sy).abs() <= maxScale * 0.02) {
-      return _scaled(from: corrected, to: decodedPixelSize);
-    }
-
-    return OcrDisplayedImageSpace(
-      imageWidth: cw,
-      imageHeight: ch,
-      toDisplay: (Offset p) => p,
-    );
+    return _scaled(from: corrected, to: decodedPixelSize);
   }
 
   static OcrDisplayedImageSpace _scaled({
