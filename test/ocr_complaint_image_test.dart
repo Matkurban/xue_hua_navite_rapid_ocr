@@ -5,8 +5,9 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xue_hua_navite_rapid_ocr/xue_hua_navite_rapid_ocr.dart';
 
-/// Upright vault UI plus the steep translucent edges that the complaint
-/// screenshot's skewed highlight quads leave behind.
+/// Owner screenshot of the XueHua vault UI with the skewed highlight quads
+/// already painted into the pixels. This file is the original attachment
+/// (638636 bytes, 822×1666), not a synthetic stand-in.
 const String _kComplaintPng = 'example/ocr_overlay_complaint.png';
 
 void main() {
@@ -16,10 +17,13 @@ void main() {
   test('complaint screenshot keeps horizontal UI runs untilted', () async {
     final File file = File(_kComplaintPng);
     expect(file.existsSync(), isTrue, reason: 'missing $_kComplaintPng');
+    expect(file.lengthSync(), 638636, reason: 'fixture must be the owner PNG');
     final ({int width, int height, Uint8List rgba}) image = await _decodePng(
       binding,
       file.readAsBytesSync(),
     );
+    expect(image.width, 822);
+    expect(image.height, 1666);
     final List<OcrTextLine> lines = _recognize(
       image.rgba,
       image.width,

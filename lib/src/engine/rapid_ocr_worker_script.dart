@@ -252,7 +252,7 @@ function medianColumnSpan(ink, width, x0, x1, y0, y1) {
   return spans[spans.length >> 1];
 }
 
-function baselineAngle(ink, width, x0, x1, y0, y1, rw, rh) {
+function baselineAngle(ink, width, x0, x1, y0, y1, rw, rh, medianSpan) {
   let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = 0;
   for (let x = x0; x < x1; x++) {
     let count = 0, sum = 0;
@@ -276,7 +276,8 @@ function baselineAngle(ink, width, x0, x1, y0, y1, rw, rh) {
   const angle = Math.atan(slope) * 180 / Math.PI;
   if (Math.abs(angle) <= 6) return 0;
   const rise = Math.abs(slope) * rw;
-  if (rise < Math.max(6, rh * 0.45)) return 0;
+  // Climb must exceed the ink's own column height (short overlay slivers).
+  if (rise < Math.max(medianSpan, rh * 0.45)) return 0;
   return angle;
 }
 
@@ -469,8 +470,9 @@ function localizeInkLines(data, w, h, options) {
       const density = inkPixels / (rw * rh);
       const occupancy = occupied / rw;
       if (density < 0.025 || occupancy < 0.22) continue;
-      if (medianColumnSpan(ink, w, aa, bb, yy0, yy1) < 6) continue;
-      const angle = doAngle ? baselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh) : 0;
+      const columnSpan = medianColumnSpan(ink, w, aa, bb, yy0, yy1);
+      if (columnSpan < 6) continue;
+      const angle = doAngle ? baselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh, columnSpan) : 0;
       const pad = Math.min(
         rh * 0.35,
         Math.max(1, Math.min(3, rh * 0.08)) * (unclipRatio / 1.6)

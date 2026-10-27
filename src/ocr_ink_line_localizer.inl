@@ -96,7 +96,7 @@ int MedianColumnSpan(const std::vector<uint8_t>& ink, int width, int x0, int x1,
 }
 
 float BaselineAngle(const std::vector<uint8_t>& ink, int width, int x0, int x1,
-                    int y0, int y1, int rw, int rh) {
+                    int y0, int y1, int rw, int rh, int median_span) {
   double sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
   int n = 0;
   for (int x = x0; x < x1; ++x) {
@@ -123,7 +123,9 @@ float BaselineAngle(const std::vector<uint8_t>& ink, int width, int x0, int x1,
   const float angle = static_cast<float>(std::atan(slope) * 180.0 / 3.141592653589793);
   if (std::abs(angle) <= 6.0f) return 0;
   const float rise = static_cast<float>(std::abs(slope)) * static_cast<float>(rw);
-  if (rise < std::max(6.0f, rh * 0.45f)) return 0;
+  // Climb must exceed the ink's own column height. A short overlay sliver
+  // can exceed 6° while rising less than its stroke (the 20×15 complaint edge).
+  if (rise < std::max(static_cast<float>(median_span), rh * 0.45f)) return 0;
   return angle;
 }
 
@@ -327,9 +329,11 @@ std::vector<LocalizedInkLine> LocalizeInkLines(const RgbaImage& img,
       const float density = static_cast<float>(ink_pixels) / static_cast<float>(rw * rh);
       const float occupancy = static_cast<float>(occupied) / static_cast<float>(rw);
       if (density < 0.025f || occupancy < 0.22f) continue;
-      if (MedianColumnSpan(ink, w, aa, bb, yy0, yy1) < 6) continue;
+      const int column_span = MedianColumnSpan(ink, w, aa, bb, yy0, yy1);
+      if (column_span < 6) continue;
 
-      const float angle = opt.do_angle ? BaselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh) : 0;
+      const float angle =
+          opt.do_angle ? BaselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh, column_span) : 0;
 
       const float pad = std::min(
           rh * 0.35f,

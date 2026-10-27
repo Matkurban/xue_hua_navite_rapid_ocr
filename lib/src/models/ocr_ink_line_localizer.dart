@@ -410,10 +410,11 @@ class OcrInkLineLocalizer {
       // A glyph stroke fills several pixels in each column. A skewed overlay
       // edge or rounded-corner sliver is only 1–4px tall per column and must
       // not become a rotated highlight.
-      if (_medianColumnSpan(ink, width, aa, bb, yy0, yy1) < 6) continue;
+      final int span = _medianColumnSpan(ink, width, aa, bb, yy0, yy1);
+      if (span < 6) continue;
 
       final double angle = options.doAngle
-          ? _baselineAngle(ink, width, aa, bb, yy0, yy1, rw, rh)
+          ? _baselineAngle(ink, width, aa, bb, yy0, yy1, rw, rh, span)
           : 0;
 
       final double pad =
@@ -486,6 +487,10 @@ class OcrInkLineLocalizer {
 
   /// Baseline tilt in degrees. Horizontal UI text, including a few degrees of
   /// centroid noise, stays at 0. A coherent rotated run (about 12°) is kept.
+  ///
+  /// [medianSpan] is the ink's own column height. The baseline has to climb
+  /// by more than that before the quad rotates. A short overlay sliver can
+  /// regress past 6° while rising only a handful of pixels inside its stroke.
   static double _baselineAngle(
     Uint8List ink,
     int width,
@@ -495,6 +500,7 @@ class OcrInkLineLocalizer {
     int y1,
     int rw,
     int rh,
+    int medianSpan,
   ) {
     double sumX = 0;
     double sumY = 0;
@@ -526,7 +532,10 @@ class OcrInkLineLocalizer {
     // Upright screenshot text regresses a few degrees off flat. That is noise.
     if (angle.abs() <= 6.0) return 0;
     final double rise = slope.abs() * rw;
-    if (rise < math.max(6.0, rh * 0.45)) return 0;
+    // Rise must clear the stroke itself. The complaint screenshot's leftover
+    // blue edge is 20×15px and climbs 7px inside a 9px column, which is not
+    // a rotated glyph run. A ~12° stroke run climbs several times its span.
+    if (rise < math.max(medianSpan.toDouble(), rh * 0.45)) return 0;
     return angle;
   }
 
