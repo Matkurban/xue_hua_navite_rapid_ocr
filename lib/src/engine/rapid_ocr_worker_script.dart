@@ -234,6 +234,52 @@ function undecodedDemoLines(w, h, minConfidence) {
   return lines;
 }
 
+function medianColumnSpan(ink, width, x0, x1, y0, y1) {
+  const spans = [];
+  for (let x = x0; x < x1; x++) {
+    let first = -1;
+    let last = y0;
+    for (let y = y0; y < y1; y++) {
+      if (ink[y * width + x]) {
+        if (first < 0) first = y;
+        last = y;
+      }
+    }
+    if (first >= 0) spans.push(last - first + 1);
+  }
+  if (!spans.length) return 0;
+  spans.sort((a, b) => a - b);
+  return spans[spans.length >> 1];
+}
+
+function baselineAngle(ink, width, x0, x1, y0, y1, rw, rh) {
+  let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = 0;
+  for (let x = x0; x < x1; x++) {
+    let count = 0, sum = 0;
+    for (let y = y0; y < y1; y++) {
+      if (ink[y * width + x]) {
+        count++;
+        sum += y;
+      }
+    }
+    if (!count) continue;
+    const cy = sum / count;
+    sumX += x;
+    sumY += cy;
+    sumXX += x * x;
+    sumXY += x * cy;
+    n++;
+  }
+  const denom = n * sumXX - sumX * sumX;
+  if (n < 6 || Math.abs(denom) <= 1e-3) return 0;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const angle = Math.atan(slope) * 180 / Math.PI;
+  if (Math.abs(angle) <= 6) return 0;
+  const rise = Math.abs(slope) * rw;
+  if (rise < Math.max(6, rh * 0.45)) return 0;
+  return angle;
+}
+
 function localizeInkLines(data, w, h, options) {
   const doAngle = !options || options.doAngle !== false;
   const boxScoreThresh = options && options.boxScoreThresh !== undefined ? options.boxScoreThresh : 0.6;
@@ -423,33 +469,8 @@ function localizeInkLines(data, w, h, options) {
       const density = inkPixels / (rw * rh);
       const occupancy = occupied / rw;
       if (density < 0.025 || occupancy < 0.22) continue;
-      let angle = 0;
-      if (doAngle && occupied >= 6) {
-        let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, n = 0;
-        for (let x = aa; x < bb; x++) {
-          let count = 0, sum = 0;
-          for (let y = yy0; y < yy1; y++) {
-            if (ink[y * w + x]) {
-              count++;
-              sum += y;
-            }
-          }
-          if (!count) continue;
-          const cy = sum / count;
-          sumX += x;
-          sumY += cy;
-          sumXX += x * x;
-          sumXY += x * cy;
-          n++;
-        }
-        const denom = n * sumXX - sumX * sumX;
-        if (n >= 6 && Math.abs(denom) > 1e-3) {
-          const slope = (n * sumXY - sumX * sumY) / denom;
-          angle = Math.atan(slope) * 180 / Math.PI;
-          const rise = Math.abs(Math.tan(angle * Math.PI / 180)) * rw;
-          if (rise < Math.max(2.5, rh * 0.28)) angle = 0;
-        }
-      }
+      if (medianColumnSpan(ink, w, aa, bb, yy0, yy1) < 6) continue;
+      const angle = doAngle ? baselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh) : 0;
       const pad = Math.min(
         rh * 0.35,
         Math.max(1, Math.min(3, rh * 0.08)) * (unclipRatio / 1.6)

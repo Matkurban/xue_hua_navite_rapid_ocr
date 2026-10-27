@@ -9,7 +9,7 @@ class OcrLiveTextStyle {
     this.highlightOutset = 1.25,
     this.minConfidence = 0.05,
     this.minBoxScore = 0.05,
-    this.axisSnapDegrees = 4.0,
+    this.axisSnapDegrees = 6.0,
     this.highlightFillColor = const Color(0x282196F3),
     this.highlightBorderColor = const Color(0x992196F3),
     this.selectedFillColor = const Color(0x4D1976D2),
@@ -29,7 +29,8 @@ class OcrLiveTextStyle {
   final double minBoxScore;
 
   /// Top and bottom edges within this many degrees of horizontal snap to an
-  /// axis-aligned box. Steeper lines keep their oriented quad.
+  /// axis-aligned box. Upright UI noise is inside 6°. A real ~12° line stays
+  /// oriented.
   final double axisSnapDegrees;
 
   final Color highlightFillColor;

@@ -75,6 +75,58 @@ std::vector<C_OcrTextLine> BuildUndecodedDemoLines(const RgbaImage& img,
   return lines;
 }
 
+int MedianColumnSpan(const std::vector<uint8_t>& ink, int width, int x0, int x1,
+                     int y0, int y1) {
+  std::vector<int> spans;
+  spans.reserve(static_cast<size_t>(std::max(0, x1 - x0)));
+  for (int x = x0; x < x1; ++x) {
+    int first = -1;
+    int last = y0;
+    for (int y = y0; y < y1; ++y) {
+      if (ink[static_cast<size_t>(y) * width + x]) {
+        if (first < 0) first = y;
+        last = y;
+      }
+    }
+    if (first >= 0) spans.push_back(last - first + 1);
+  }
+  if (spans.empty()) return 0;
+  std::nth_element(spans.begin(), spans.begin() + spans.size() / 2, spans.end());
+  return spans[spans.size() / 2];
+}
+
+float BaselineAngle(const std::vector<uint8_t>& ink, int width, int x0, int x1,
+                    int y0, int y1, int rw, int rh) {
+  double sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
+  int n = 0;
+  for (int x = x0; x < x1; ++x) {
+    int count = 0;
+    int sum = 0;
+    for (int y = y0; y < y1; ++y) {
+      if (ink[static_cast<size_t>(y) * width + x]) {
+        ++count;
+        sum += y;
+      }
+    }
+    if (count == 0) continue;
+    const double cx = x;
+    const double cy = static_cast<double>(sum) / count;
+    sum_x += cx;
+    sum_y += cy;
+    sum_xx += cx * cx;
+    sum_xy += cx * cy;
+    ++n;
+  }
+  const double denom = n * sum_xx - sum_x * sum_x;
+  if (n < 6 || std::abs(denom) <= 1e-3) return 0;
+  const double slope = (n * sum_xy - sum_x * sum_y) / denom;
+  const float angle = static_cast<float>(std::atan(slope) * 180.0 / 3.141592653589793);
+  if (std::abs(angle) <= 6.0f) return 0;
+  const float rise = static_cast<float>(std::abs(slope)) * static_cast<float>(rw);
+  if (rise < std::max(6.0f, rh * 0.45f)) return 0;
+  return angle;
+}
+
 std::vector<LocalizedInkLine> LocalizeInkLines(const RgbaImage& img,
                                                const OcrDetectOption& opt) {
   std::vector<LocalizedInkLine> found;
@@ -275,37 +327,9 @@ std::vector<LocalizedInkLine> LocalizeInkLines(const RgbaImage& img,
       const float density = static_cast<float>(ink_pixels) / static_cast<float>(rw * rh);
       const float occupancy = static_cast<float>(occupied) / static_cast<float>(rw);
       if (density < 0.025f || occupancy < 0.22f) continue;
+      if (MedianColumnSpan(ink, w, aa, bb, yy0, yy1) < 6) continue;
 
-      float angle = 0;
-      if (opt.do_angle && occupied >= 6) {
-        double sum_x = 0, sum_y = 0, sum_xx = 0, sum_xy = 0;
-        int n = 0;
-        for (int x = aa; x < bb; ++x) {
-          int count = 0;
-          int sum = 0;
-          for (int y = yy0; y < yy1; ++y) {
-            if (ink[static_cast<size_t>(y) * w + x]) {
-              ++count;
-              sum += y;
-            }
-          }
-          if (count == 0) continue;
-          const double cx = x;
-          const double cy = static_cast<double>(sum) / count;
-          sum_x += cx;
-          sum_y += cy;
-          sum_xx += cx * cx;
-          sum_xy += cx * cy;
-          ++n;
-        }
-        const double denom = n * sum_xx - sum_x * sum_x;
-        if (n >= 6 && std::abs(denom) > 1e-3) {
-          const double slope = (n * sum_xy - sum_x * sum_y) / denom;
-          angle = static_cast<float>(std::atan(slope) * 180.0 / 3.141592653589793);
-          const float rise = std::abs(std::tan(angle * 3.14159265f / 180.0f)) * rw;
-          if (rise < std::max(2.5f, rh * 0.28f)) angle = 0;
-        }
-      }
+      const float angle = opt.do_angle ? BaselineAngle(ink, w, aa, bb, yy0, yy1, rw, rh) : 0;
 
       const float pad = std::min(
           rh * 0.35f,

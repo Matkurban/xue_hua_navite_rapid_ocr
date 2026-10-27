@@ -42,8 +42,8 @@ class OcrLiveTextGeometry {
   /// Orders corners and replaces near-upright shears with a tight AABB.
   ///
   /// Quads whose top and bottom edges are within [axisSnapDegrees] of
-  /// horizontal are snapped. Genuinely rotated lines (for example 12°) keep
-  /// their oriented quad.
+  /// horizontal are snapped. The default style uses 6°, which covers the
+  /// few-degree centroid noise of upright UI text. A 12° line stays oriented.
   static OcrTextLine sanitize(
     OcrTextLine line, {
     required double axisSnapDegrees,

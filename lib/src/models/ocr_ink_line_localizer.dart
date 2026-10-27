@@ -407,40 +407,14 @@ class OcrInkLineLocalizer {
       final double density = inkPixels / (rw * rh);
       final double occupancy = occupied / rw;
       if (density < 0.025 || occupancy < 0.22) continue;
+      // A glyph stroke fills several pixels in each column. A skewed overlay
+      // edge or rounded-corner sliver is only 1–4px tall per column and must
+      // not become a rotated highlight.
+      if (_medianColumnSpan(ink, width, aa, bb, yy0, yy1) < 6) continue;
 
-      double angle = 0;
-      if (options.doAngle && occupied >= 6) {
-        double sumX = 0;
-        double sumY = 0;
-        double sumXX = 0;
-        double sumXY = 0;
-        int n = 0;
-        for (int x = aa; x < bb; x++) {
-          int count = 0;
-          int sum = 0;
-          for (int y = yy0; y < yy1; y++) {
-            if (ink[y * width + x] != 0) {
-              count++;
-              sum += y;
-            }
-          }
-          if (count == 0) continue;
-          final double cx = x.toDouble();
-          final double cy = sum / count;
-          sumX += cx;
-          sumY += cy;
-          sumXX += cx * cx;
-          sumXY += cx * cy;
-          n++;
-        }
-        final double denom = n * sumXX - sumX * sumX;
-        if (n >= 6 && denom.abs() > 1e-3) {
-          final double slope = (n * sumXY - sumX * sumY) / denom;
-          angle = math.atan(slope) * 180.0 / math.pi;
-          final double rise = math.tan(angle * math.pi / 180.0).abs() * rw;
-          if (rise < math.max(2.5, rh * 0.28)) angle = 0;
-        }
-      }
+      final double angle = options.doAngle
+          ? _baselineAngle(ink, width, aa, bb, yy0, yy1, rw, rh)
+          : 0;
 
       final double pad =
           (math.max(1.0, math.min(3.0, rh * 0.08)) *
@@ -482,6 +456,78 @@ class OcrInkLineLocalizer {
       );
     }
     return lines;
+  }
+
+  /// Vertical ink run inside one column. Hairlines stay under 6px.
+  static int _medianColumnSpan(
+    Uint8List ink,
+    int width,
+    int x0,
+    int x1,
+    int y0,
+    int y1,
+  ) {
+    final List<int> spans = <int>[];
+    for (int x = x0; x < x1; x++) {
+      int? first;
+      int last = y0;
+      for (int y = y0; y < y1; y++) {
+        if (ink[y * width + x] != 0) {
+          first ??= y;
+          last = y;
+        }
+      }
+      if (first != null) spans.add(last - first + 1);
+    }
+    if (spans.isEmpty) return 0;
+    spans.sort();
+    return spans[spans.length ~/ 2];
+  }
+
+  /// Baseline tilt in degrees. Horizontal UI text, including a few degrees of
+  /// centroid noise, stays at 0. A coherent rotated run (about 12°) is kept.
+  static double _baselineAngle(
+    Uint8List ink,
+    int width,
+    int x0,
+    int x1,
+    int y0,
+    int y1,
+    int rw,
+    int rh,
+  ) {
+    double sumX = 0;
+    double sumY = 0;
+    double sumXX = 0;
+    double sumXY = 0;
+    int n = 0;
+    for (int x = x0; x < x1; x++) {
+      int count = 0;
+      int sum = 0;
+      for (int y = y0; y < y1; y++) {
+        if (ink[y * width + x] != 0) {
+          count++;
+          sum += y;
+        }
+      }
+      if (count == 0) continue;
+      final double cx = x.toDouble();
+      final double cy = sum / count;
+      sumX += cx;
+      sumY += cy;
+      sumXX += cx * cx;
+      sumXY += cx * cy;
+      n++;
+    }
+    final double denom = n * sumXX - sumX * sumX;
+    if (n < 6 || denom.abs() <= 1e-3) return 0;
+    final double slope = (n * sumXY - sumX * sumY) / denom;
+    final double angle = math.atan(slope) * 180.0 / math.pi;
+    // Upright screenshot text regresses a few degrees off flat. That is noise.
+    if (angle.abs() <= 6.0) return 0;
+    final double rise = slope.abs() * rw;
+    if (rise < math.max(6.0, rh * 0.45)) return 0;
+    return angle;
   }
 
   static List<Offset> _axisCorners({
