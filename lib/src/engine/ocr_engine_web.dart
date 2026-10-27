@@ -4,6 +4,8 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import '../models/ocr_models.dart';
 import '../models/paragraph_clusterer.dart';
 import 'ocr_engine_interface.dart';
@@ -102,40 +104,46 @@ class OcrEngineWeb implements OcrPlatformEngine {
       ..['webCacheName'] = config.webCacheName.toJS
       ..['webOrtScriptUrl'] = config.webOrtScriptUrl.toJS;
 
-    if (config.detModelPathOrUrl != null) {
-      initPayload['detModelUrl'] = config.detModelPathOrUrl!.toJS;
-    }
-    if (config.clsModelPathOrUrl != null) {
-      initPayload['clsModelUrl'] = config.clsModelPathOrUrl!.toJS;
-    }
-    if (config.recModelPathOrUrl != null) {
-      initPayload['recModelUrl'] = config.recModelPathOrUrl!.toJS;
-    }
-    if (config.keysPathOrUrl != null) {
-      initPayload['keysUrl'] = config.keysPathOrUrl!.toJS;
-    }
-    if (config.keysUtf8Text != null) {
-      initPayload['keysText'] = config.keysUtf8Text!.toJS;
-    }
+    final Uint8List? detBytes =
+        config.detModelBytes ?? await _loadAssetBytes(config.detModelPathOrUrl);
+    final Uint8List? clsBytes =
+        config.clsModelBytes ?? await _loadAssetBytes(config.clsModelPathOrUrl);
+    final Uint8List? recBytes =
+        config.recModelBytes ?? await _loadAssetBytes(config.recModelPathOrUrl);
+    final String? keysText =
+        config.keysUtf8Text ?? await _loadAssetString(config.keysPathOrUrl);
 
     final List<JSObject> transferList = <JSObject>[];
-    if (config.detModelBytes != null) {
-      final Uint8List copy = Uint8List.fromList(config.detModelBytes!);
-      final JSUint8Array jsArr = copy.toJS;
-      initPayload['detModelBytes'] = jsArr;
-      transferList.add(jsArr['buffer'] as JSObject);
+    _putModel(
+      initPayload,
+      transferList,
+      urlKey: 'detModelUrl',
+      bytesKey: 'detModelBytes',
+      path: config.detModelPathOrUrl,
+      bytes: detBytes,
+    );
+    _putModel(
+      initPayload,
+      transferList,
+      urlKey: 'clsModelUrl',
+      bytesKey: 'clsModelBytes',
+      path: config.clsModelPathOrUrl,
+      bytes: clsBytes,
+    );
+    _putModel(
+      initPayload,
+      transferList,
+      urlKey: 'recModelUrl',
+      bytesKey: 'recModelBytes',
+      path: config.recModelPathOrUrl,
+      bytes: recBytes,
+    );
+    if (config.keysPathOrUrl != null &&
+        (keysText == null || _isRemoteUrl(config.keysPathOrUrl!))) {
+      initPayload['keysUrl'] = config.keysPathOrUrl!.toJS;
     }
-    if (config.clsModelBytes != null) {
-      final Uint8List copy = Uint8List.fromList(config.clsModelBytes!);
-      final JSUint8Array jsArr = copy.toJS;
-      initPayload['clsModelBytes'] = jsArr;
-      transferList.add(jsArr['buffer'] as JSObject);
-    }
-    if (config.recModelBytes != null) {
-      final Uint8List copy = Uint8List.fromList(config.recModelBytes!);
-      final JSUint8Array jsArr = copy.toJS;
-      initPayload['recModelBytes'] = jsArr;
-      transferList.add(jsArr['buffer'] as JSObject);
+    if (keysText != null) {
+      initPayload['keysText'] = keysText.toJS;
     }
 
     await _postWorkerCommand(
@@ -259,6 +267,79 @@ class OcrEngineWeb implements OcrPlatformEngine {
       }
     }
     _pendingRequests.clear();
+  }
+
+  static const String _packageAssetPrefix =
+      'packages/xue_hua_navite_rapid_ocr/';
+
+  static bool _isRemoteUrl(String value) {
+    final String lower = value.toLowerCase();
+    return lower.startsWith('http://') ||
+        lower.startsWith('https://') ||
+        lower.startsWith('blob:') ||
+        lower.startsWith('data:');
+  }
+
+  static Iterable<String> _assetKeyCandidates(String pathOrAsset) sync* {
+    yield pathOrAsset;
+    if (pathOrAsset.startsWith('assets/') &&
+        !pathOrAsset.startsWith(_packageAssetPrefix)) {
+      yield '$_packageAssetPrefix$pathOrAsset';
+    }
+  }
+
+  static Future<Uint8List?> _loadAssetBytes(String? pathOrAsset) async {
+    if (pathOrAsset == null ||
+        pathOrAsset.isEmpty ||
+        _isRemoteUrl(pathOrAsset)) {
+      return null;
+    }
+    for (final String key in _assetKeyCandidates(pathOrAsset)) {
+      try {
+        final ByteData data = await rootBundle.load(key);
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      } catch (_) {
+        // Try the package-prefixed asset key next.
+      }
+    }
+    return null;
+  }
+
+  static Future<String?> _loadAssetString(String? pathOrAsset) async {
+    if (pathOrAsset == null ||
+        pathOrAsset.isEmpty ||
+        _isRemoteUrl(pathOrAsset)) {
+      return null;
+    }
+    for (final String key in _assetKeyCandidates(pathOrAsset)) {
+      try {
+        return await rootBundle.loadString(key);
+      } catch (_) {
+        // Try the package-prefixed asset key next.
+      }
+    }
+    return null;
+  }
+
+  static void _putModel(
+    JSObject payload,
+    List<JSObject> transfer, {
+    required String urlKey,
+    required String bytesKey,
+    required String? path,
+    required Uint8List? bytes,
+  }) {
+    if (bytes != null && bytes.isNotEmpty) {
+      final Uint8List copy = Uint8List.fromList(bytes);
+      final JSUint8Array jsArr = copy.toJS;
+      payload[bytesKey] = jsArr;
+      transfer.add(jsArr['buffer'] as JSObject);
+    }
+    if (path != null &&
+        path.isNotEmpty &&
+        (bytes == null || bytes.isEmpty || _isRemoteUrl(path))) {
+      payload[urlKey] = path.toJS;
+    }
   }
 
   void _ensureInitialized() {

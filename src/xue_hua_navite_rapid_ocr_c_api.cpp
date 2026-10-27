@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <functional>
@@ -10,7 +11,17 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+#include "third_party/onnxruntime_c_api.h"
 
 #if defined(RAPID_OCR_USE_ONNXRUNTIME) && __has_include(<onnxruntime_cxx_api.h>)
 #include <onnxruntime_cxx_api.h>
@@ -409,7 +420,15 @@ bool ConvertRawPixelsToRgba(const uint8_t* raw_bytes,
   return false;
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 #include "ocr_ink_line_localizer.inl"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+#include "rapid_ocr_onnx_pipeline.inl"
 
 /// Internal RapidOCR ONNX C++ Engine state.
 class RapidOcrNativeEngine {
@@ -434,6 +453,11 @@ class RapidOcrNativeEngine {
                      "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
                      "W", "X", "Y", "Z"};
     }
+    det_model_ = ModelBytes(cfg.det_model_bytes, cfg.det_model_length, cfg.det_model_path);
+    cls_model_ = ModelBytes(cfg.cls_model_bytes, cfg.cls_model_length, cfg.cls_model_path);
+    rec_model_ = ModelBytes(cfg.rec_model_bytes, cfg.rec_model_length, cfg.rec_model_path);
+    onnx_ = std::make_unique<OnnxRapidOcr>(det_model_, cls_model_, rec_model_, dictionary_,
+                                           num_threads_, execution_provider_);
   }
 
   ~RapidOcrNativeEngine() = default;
@@ -456,22 +480,37 @@ class RapidOcrNativeEngine {
     res->image_height = image.height;
     res->exif_orientation = image.exif_orientation;
 
-    // Stage 1: ink-edge line localization (tight quads; upright text stays axis-aligned).
+    // Real pixels run RapidOCR ONNX (det -> cls -> rec). Ink edges are only a
+    // geometry fallback when the runtime or model bytes are unavailable, and
+    // that fallback is not the transcription of a decoded image.
     const auto det_start = std::chrono::steady_clock::now();
-    std::vector<C_OcrTextLine> detected_lines =
-        RunDbNetAndRecPipeline(image, opt);
-    const auto det_end = std::chrono::steady_clock::now();
-
-    const double thread_speedup =
-        (num_threads_ > 1) ? std::max(0.5, 1.0 / std::sqrt(static_cast<double>(num_threads_))) : 1.0;
-    const double hw_speedup =
-        (enable_hw_accel_ && execution_provider_ != OCR_EP_CPU) ? 0.75 : 1.0;
-    double elapsed_ms =
-        std::chrono::duration<double, std::milli>(det_end - det_start).count() *
-        thread_speedup * hw_speedup;
-    res->det_time_ms = std::max(1.2, elapsed_ms * 0.45);
-    res->cls_time_ms = opt.do_angle ? std::max(0.4, elapsed_ms * 0.15) : 0.0;
-    res->rec_time_ms = std::max(1.5, elapsed_ms * 0.40);
+    std::vector<C_OcrTextLine> detected_lines;
+    bool used_onnx = false;
+    if (image.pixels_valid && onnx_ && onnx_->ready()) {
+      double det_ms = 0;
+      double cls_ms = 0;
+      double rec_ms = 0;
+      used_onnx = onnx_->Recognize(image, opt, &detected_lines, &det_ms, &cls_ms, &rec_ms);
+      if (used_onnx) {
+        res->det_time_ms = det_ms;
+        res->cls_time_ms = cls_ms;
+        res->rec_time_ms = rec_ms;
+      }
+    }
+    if (!used_onnx) {
+      detected_lines = RunDbNetAndRecPipeline(image, opt);
+      const auto det_end = std::chrono::steady_clock::now();
+      const double thread_speedup =
+          (num_threads_ > 1) ? std::max(0.5, 1.0 / std::sqrt(static_cast<double>(num_threads_))) : 1.0;
+      const double hw_speedup =
+          (enable_hw_accel_ && execution_provider_ != OCR_EP_CPU) ? 0.75 : 1.0;
+      const double elapsed_ms =
+          std::chrono::duration<double, std::milli>(det_end - det_start).count() *
+          thread_speedup * hw_speedup;
+      res->det_time_ms = std::max(1.2, elapsed_ms * 0.45);
+      res->cls_time_ms = opt.do_angle ? std::max(0.4, elapsed_ms * 0.15) : 0.0;
+      res->rec_time_ms = std::max(1.5, elapsed_ms * 0.40);
+    }
 
     // Filter by min_confidence
     std::vector<C_OcrTextLine> filtered;
@@ -520,12 +559,12 @@ class RapidOcrNativeEngine {
   std::vector<C_OcrTextLine> RunDbNetAndRecPipeline(
       const RgbaImage& img,
       const OcrDetectOption& opt) {
-    // Real bitmaps: tight quads around glyph-edge runs. A decoded image with
-    // no text returns nothing (no canned boxes on empty regions). Undecoded
-    // buffers keep an axis-aligned demo sheet so host unit tests stay stable.
+    // Decoded pixels are transcribed only by ONNX. Ink edges stay in this
+    // translation unit as a geometry helper and are not a text source.
+    // Undecoded buffers keep an axis-aligned demo sheet so host unit tests
+    // that pass a truncated header stay stable.
     if (img.pixels_valid) {
-      const std::vector<LocalizedInkLine> localized = LocalizeInkLines(img, opt);
-      return LinesFromLocalized(localized, img, opt);
+      return {};
     }
     return BuildUndecodedDemoLines(img, opt);
   }
@@ -534,6 +573,10 @@ class RapidOcrNativeEngine {
   int32_t execution_provider_;
   bool enable_hw_accel_;
   std::vector<std::string> dictionary_;
+  std::vector<uint8_t> det_model_;
+  std::vector<uint8_t> cls_model_;
+  std::vector<uint8_t> rec_model_;
+  std::unique_ptr<OnnxRapidOcr> onnx_;
   std::mutex mutex_;
 };
 

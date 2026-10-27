@@ -34,3 +34,8 @@ migrate_working_dir/
 
 # Large RapidOCR ONNX weights (download with scripts/download_models.sh)
 assets/models/*.onnx
+
+# ONNX Runtime binaries (scripts/download_onnxruntime.sh).
+# src/third_party/onnxruntime_c_api.h stays tracked.
+/third_party/onnxruntime*
+/third_party/.onnxruntime-download/
